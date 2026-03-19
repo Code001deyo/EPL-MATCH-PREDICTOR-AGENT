@@ -1,0 +1,35 @@
+# Node
+frontend/node_modules/
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+venv/
+*.egg-info/
+
+# Build outputs
+frontend/build/
+dist/
+
+# ML models
+backend/saved_models/*.pkl
+backend/saved_models/*.joblib
+
+# Data
+data/*.csv
+data/*.json
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.log

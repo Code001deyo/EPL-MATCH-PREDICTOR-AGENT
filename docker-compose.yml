@@ -6,7 +6,7 @@ services:
     ports:
       - "8001:8000"
     volumes:
-      - db_data:/app
+      - db_data:/app/data
     environment:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped

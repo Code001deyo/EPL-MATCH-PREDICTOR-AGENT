@@ -6,7 +6,7 @@ from db.database import init_db, get_db
 from data.ingestion import seed_database
 from data.features import load_matches, build_training_matrix
 from models.ml_model import train
-from routers import predict, teams, results
+from routers import predict, teams, results, analytics
 
 app = FastAPI(title="EPL Score Predictor", version="1.0.0")
 
@@ -20,6 +20,7 @@ app.add_middleware(
 app.include_router(predict.router)
 app.include_router(teams.router)
 app.include_router(results.router)
+app.include_router(analytics.router)
 
 
 @app.on_event("startup")

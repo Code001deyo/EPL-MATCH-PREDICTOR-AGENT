@@ -1,8 +1,11 @@
-from sqlalchemy import create_engine, Column, Integer, Text
+from sqlalchemy import create_engine, Column, Integer, Text, event
 from sqlalchemy.types import Float as Real
 from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy import text
 
-DATABASE_URL = "sqlite:///./epl.db"
+import os
+os.makedirs("/app/data", exist_ok=True)
+DATABASE_URL = "sqlite:////app/data/epl.db"
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -25,6 +28,16 @@ class MatchResult(Base):
     away_shots_ot = Column(Integer)
     home_possession = Column(Real)
     away_possession = Column(Real)
+    home_shots = Column(Integer, nullable=True)
+    away_shots = Column(Integer, nullable=True)
+    home_corners = Column(Integer, nullable=True)
+    away_corners = Column(Integer, nullable=True)
+    home_fouls = Column(Integer, nullable=True)
+    away_fouls = Column(Integer, nullable=True)
+    home_yellow_cards = Column(Integer, nullable=True)
+    away_yellow_cards = Column(Integer, nullable=True)
+    home_red_cards = Column(Integer, nullable=True)
+    away_red_cards = Column(Integer, nullable=True)
 
 
 class Prediction(Base):
@@ -42,6 +55,7 @@ class Prediction(Base):
     key_drivers = Column(Text)
     actual_home = Column(Integer, nullable=True)
     actual_away = Column(Integer, nullable=True)
+    predicted_stats = Column(Text, nullable=True)
     created_at = Column(Text)
 
 
@@ -53,5 +67,30 @@ def get_db():
         db.close()
 
 
+def migrate_db():
+    """Add new columns to existing tables without dropping data."""
+    new_cols = [
+        ("match_results", "home_shots", "INTEGER"),
+        ("match_results", "away_shots", "INTEGER"),
+        ("match_results", "home_corners", "INTEGER"),
+        ("match_results", "away_corners", "INTEGER"),
+        ("match_results", "home_fouls", "INTEGER"),
+        ("match_results", "away_fouls", "INTEGER"),
+        ("match_results", "home_yellow_cards", "INTEGER"),
+        ("match_results", "away_yellow_cards", "INTEGER"),
+        ("match_results", "home_red_cards", "INTEGER"),
+        ("match_results", "away_red_cards", "INTEGER"),
+        ("predictions", "predicted_stats", "TEXT"),
+    ]
+    with engine.connect() as conn:
+        for table, col, col_type in new_cols:
+            try:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))
+                conn.commit()
+            except Exception:
+                pass  # column already exists
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
+    migrate_db()

@@ -86,6 +86,7 @@ def predict_fixture(req: PredictRequest, db: Session = Depends(get_db)):
         away_win_prob=result["away_win_prob"],
         confidence=result["confidence"],
         key_drivers=json.dumps(drivers),
+        predicted_stats=json.dumps(result.get("predicted_stats", {})),
         actual_home=fixture_row.home_goals if req.fixture_id else None,
         actual_away=fixture_row.away_goals if req.fixture_id else None,
         created_at=datetime.utcnow().isoformat(),
@@ -109,6 +110,7 @@ def predict_fixture(req: PredictRequest, db: Session = Depends(get_db)):
         },
         "confidence": result["confidence"],
         "key_drivers": drivers,
+        "predicted_stats": result.get("predicted_stats", {}),
         "actual_score": actual_score,
         "prediction_id": record.id,
     }
