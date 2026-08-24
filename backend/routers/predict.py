@@ -178,6 +178,11 @@ def predict_fixture(req: PredictRequest, request: Request, db: Session = Depends
         "season": season,
         "date": predict_date,
         "predicted_score": f"{result['predicted_home']}-{result['predicted_away']}",
+        # What the model actually decided. The scoreline agrees with it by
+        # construction, but it is stated rather than left to the client to infer
+        # by comparing two integers - which is how the site came to display a
+        # draw for fixtures the model gave to the home side.
+        "predicted_outcome": result["predicted_outcome"],
         "home_goals": result["predicted_home"],
         "away_goals": result["predicted_away"],
         "probabilities": {
