@@ -180,8 +180,24 @@ def load_season_from_api(season_label: str, season_id: int) -> pd.DataFrame:
 
 
 def _is_matchweek_corrupted(db) -> bool:
+    """True if Premier League matchweeks exceed a real campaign.
+
+    Scoped to E0 deliberately. This guard exists to catch an old algorithm that
+    produced matchweeks above 38, and it used to scan every division — so when the
+    Championship arrived with its 46 rounds, a perfectly correct E1 season read as
+    corruption and wiped the whole table on boot. Since the wipe is followed by a
+    reseed that re-adds those same 46-round rows, the next boot would have done it
+    again, forever.
+
+    38 is a Premier League campaign. The Championship's 46 is not this guard's
+    business.
+    """
     from sqlalchemy import func
-    result = db.query(func.max(MatchResult.matchweek)).scalar()
+    result = (
+        db.query(func.max(MatchResult.matchweek))
+        .filter(MatchResult.division == "E0")
+        .scalar()
+    )
     return result is not None and result > 38
 
 
@@ -243,6 +259,12 @@ def seed_database():
             ).delete()
         db.commit()
         missing.extend(partial)
+
+    # Championship seasons are completed independently of the Premier League ones.
+    # This runs BEFORE the up-to-date bail-out below: E0 being complete says
+    # nothing about E1, and putting it after meant a fully-seeded database never
+    # gained the second division at all.
+    _seed_championship_seasons(db, list(season_ids))
 
     if not missing:
         total = db.query(MatchResult).count()
@@ -338,7 +360,14 @@ def refresh_current_season():
 
     db = SessionLocal()
     print(f"Refreshing {CURRENT} (id={season_id})...")
-    db.query(MatchResult).filter(MatchResult.season == CURRENT).delete()
+    # Scoped to E0. This delete used to take the whole season, and the re-insert
+    # below only writes Premier League fixtures from PulseLive — so every refresh
+    # silently destroyed the current Championship season. It runs on boot and every
+    # six hours, which is why the in-progress E1 rows kept disappearing minutes
+    # after they were seeded.
+    db.query(MatchResult).filter(
+        MatchResult.season == CURRENT, MatchResult.division == "E0"
+    ).delete()
     db.commit()
 
     df = load_season_from_api(CURRENT, season_id)
@@ -374,3 +403,36 @@ def refresh_current_season():
 
 if __name__ == "__main__":
     seed_database()
+
+
+def _seed_championship_seasons(db, season_labels: list[str]) -> None:
+    """Complete the Championship alongside the Premier League.
+
+    `promoted.py` stores a fragment of E1 — only matches involving clubs about to
+    come up — which is right for seeding a promoted club's features and wrong for
+    reporting a league. A season is topped up when it holds fewer than a full
+    campaign; the in-progress season is exempt because it is legitimately short.
+    """
+    from sqlalchemy import func
+
+    from data.championship import COMPLETE_SEASON_MATCHES, DIVISION, seed_championship
+
+    counts = dict(
+        db.query(MatchResult.season, func.count(MatchResult.id))
+        .filter(MatchResult.division == DIVISION)
+        .group_by(MatchResult.season)
+        .all()
+    )
+    current = _current_season_label()
+    todo = [
+        s for s in season_labels
+        if counts.get(s, 0) < COMPLETE_SEASON_MATCHES or s == current
+    ]
+    if not todo:
+        return
+    print(f"Completing Championship seasons: {todo}")
+    try:
+        seed_championship(todo, db=db)
+    except Exception as exc:
+        # A second-division top-up must never be the reason the app fails to boot.
+        print(f"  Championship seeding failed ({type(exc).__name__}: {exc}); continuing.")

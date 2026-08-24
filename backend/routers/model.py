@@ -126,10 +126,26 @@ def jobs_active():
 
 
 @router.get("/backtest")
-def backtest_report(db: Session = Depends(get_db)):
+def backtest_report(season: str = None, db: Session = Depends(get_db)):
     """Headline backtested accuracy, by-season and by-matchweek breakdowns, and
-    calibration buckets, read from the most recent stored run."""
+    calibration buckets, read from the most recent stored run.
+
+    `season` narrows every figure to one backtested season. Asking for a season
+    the backtest did not cover returns the covered seasons rather than an empty
+    chart, so the UI can say which seasons exist instead of rendering a blank
+    panel that looks like a failure.
+    """
     rows = db.query(Backtest).all()
+    if season:
+        covered = sorted({r.season for r in rows})
+        rows = [r for r in rows if r.season == season]
+        if not rows:
+            return {
+                "matches_scored": 0,
+                "requested_season": season,
+                "seasons_covered": covered,
+                "status": "season-not-backtested",
+            }
     results = [{
         "fixture_id": r.fixture_id, "season": r.season, "matchweek": r.matchweek,
         "date": r.date, "home_team": r.home_team, "away_team": r.away_team,

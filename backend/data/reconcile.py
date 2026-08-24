@@ -81,7 +81,17 @@ def enrich_season(db, season_label: str, division: str = "E0") -> dict:
     report["unknown_clubs"] = validate_clubs(source_df)
     index = _index_stats(source_df)
 
-    fixtures = db.query(MatchResult).filter(MatchResult.season == season_label).all()
+    # Scoped to the division being enriched. Unscoped, this walked every row in the
+    # season — so once the Championship was ingested, enriching E0 iterated 932
+    # fixtures against a 380-row Premier League file and reported 552 of them
+    # "unmatched". Worse, the loop below WRITES `fixture.division`, so an unscoped
+    # query is one coincidental name/date collision away from relabelling a
+    # second-tier match as top-flight.
+    fixtures = (
+        db.query(MatchResult)
+        .filter(MatchResult.season == season_label, MatchResult.division == division)
+        .all()
+    )
     report["fixtures_in_db"] = len(fixtures)
 
     for fixture in fixtures:

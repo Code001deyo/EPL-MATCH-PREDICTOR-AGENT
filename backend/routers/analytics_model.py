@@ -18,8 +18,18 @@ router = APIRouter(prefix="/analytics")
 
 
 @router.get("/model/performance")
-def model_performance(db: Session = Depends(get_db)):
-    preds = db.query(Prediction).order_by(Prediction.created_at).all()
+def model_performance(season: str = None, db: Session = Depends(get_db)):
+    """Live-settled accuracy, optionally scoped to one season.
+
+    `season` narrows the live-settled half only. The backtested half below spans a
+    fixed set of completed seasons chosen when the backtest was run, so it is
+    returned unchanged and labelled with the seasons it actually covers — a
+    selector cannot narrow a measurement that was never computed per season.
+    """
+    q = db.query(Prediction)
+    if season:
+        q = q.filter(Prediction.season == season)
+    preds = q.order_by(Prediction.created_at).all()
     total = len(preds)
     evaluated = [p for p in preds if p.actual_home is not None]
 
@@ -69,6 +79,8 @@ def model_performance(db: Session = Depends(get_db)):
     backtested = summarize_backtest(bt_results)
 
     return {
+        "season": season,
+        "season_scoped": season is not None,
         "live_settled": {
             "total_predictions": total,
             "evaluated": len(evaluated),

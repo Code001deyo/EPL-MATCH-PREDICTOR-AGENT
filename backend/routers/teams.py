@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from db.database import get_db, MatchResult
-from db.teams import top_flight_teams
+from db.teams import DIVISIONS, TOP_FLIGHT, division_filter, resolve_division, top_flight_teams
 import requests
 
 router = APIRouter()
@@ -30,7 +30,46 @@ def get_teams(db: Session = Depends(get_db)):
     so it handed the UI 47 clubs including Championship sides that promoted.py
     stores purely as feature history. See db/teams.py.
     """
-    return {"teams": top_flight_teams(db)}
+    return {"teams": top_flight_teams(db), "division": TOP_FLIGHT}
+
+
+@router.get("/divisions")
+def get_divisions(db: Session = Depends(get_db)):
+    """The leagues actually present in the database, with their coverage.
+
+    The UI needs this to offer both tables without hardcoding either league's
+    identity — and the counts make it obvious when a division is a fragment rather
+    than a season, which is what the Championship used to be.
+    """
+    from sqlalchemy import func
+
+    counts = dict(
+        db.query(MatchResult.division, func.count(MatchResult.id))
+        .group_by(MatchResult.division)
+        .all()
+    )
+    return {"divisions": [
+        {"id": code, "name": name, "matches": counts.get(code, 0)}
+        for code, name in DIVISIONS.items()
+        if counts.get(code, 0) > 0
+    ]}
+
+
+@router.get("/teams/by-division")
+def teams_by_division(
+    division: str = Query(TOP_FLIGHT),
+    season: str = None,
+    db: Session = Depends(get_db),
+):
+    """Clubs in one division, optionally narrowed to a single season."""
+    division = resolve_division(division)
+    q = db.query(MatchResult.home_team, MatchResult.away_team)
+    if season:
+        q = q.filter(MatchResult.season == season)
+    rows = division_filter(q, division).all()
+    names = {r[0] for r in rows} | {r[1] for r in rows}
+    names.discard(None)
+    return {"division": division, "season": season, "teams": sorted(names)}
 
 
 @router.get("/seasons")
@@ -43,8 +82,17 @@ def get_seasons(db: Session = Depends(get_db)):
 
 
 @router.get("/fixtures/recent")
-def recent_fixtures(limit: int = 10, db: Session = Depends(get_db)):
-    rows = db.query(MatchResult).order_by(MatchResult.date.desc()).limit(limit).all()
+def recent_fixtures(
+    limit: int = 10,
+    division: str = Query(TOP_FLIGHT),
+    season: str = None,
+    db: Session = Depends(get_db),
+):
+    division = resolve_division(division)
+    q = db.query(MatchResult)
+    if season:
+        q = q.filter(MatchResult.season == season)
+    rows = division_filter(q, division).order_by(MatchResult.date.desc()).limit(limit).all()
     return {"fixtures": [
         {
             "date": r.date, "home_team": r.home_team, "away_team": r.away_team,
@@ -55,11 +103,15 @@ def recent_fixtures(limit: int = 10, db: Session = Depends(get_db)):
 
 
 @router.get("/fixtures/season/{season}")
-def fixtures_by_season(season: str, db: Session = Depends(get_db)):
-    """All played fixtures for a season grouped by matchweek."""
+def fixtures_by_season(
+    season: str,
+    division: str = Query(TOP_FLIGHT),
+    db: Session = Depends(get_db),
+):
+    """All played fixtures for a season and division, grouped by matchweek."""
+    division = resolve_division(division)
     rows = (
-        db.query(MatchResult)
-        .filter(MatchResult.season == season)
+        division_filter(db.query(MatchResult).filter(MatchResult.season == season), division)
         .order_by(MatchResult.matchweek, MatchResult.date)
         .all()
     )
@@ -159,9 +211,18 @@ def refresh_data():
 
 
 @router.get("/team/{team_name}/stats")
-def team_stats(team_name: str, last_n: int = 10, db: Session = Depends(get_db)):
-    home = db.query(MatchResult).filter(MatchResult.home_team == team_name).order_by(MatchResult.date.desc()).limit(last_n).all()
-    away = db.query(MatchResult).filter(MatchResult.away_team == team_name).order_by(MatchResult.date.desc()).limit(last_n).all()
+def team_stats(
+    team_name: str,
+    last_n: int = 10,
+    division: str = Query(TOP_FLIGHT),
+    db: Session = Depends(get_db),
+):
+    division = resolve_division(division)
+    # Without the division scope, a promoted club's "last 10" silently mixed its
+    # Championship and Premier League matches — neither one league's form nor the
+    # other's.
+    home = division_filter(db.query(MatchResult).filter(MatchResult.home_team == team_name), division).order_by(MatchResult.date.desc()).limit(last_n).all()
+    away = division_filter(db.query(MatchResult).filter(MatchResult.away_team == team_name), division).order_by(MatchResult.date.desc()).limit(last_n).all()
     home_data = [{"date": r.date, "opponent": r.away_team, "gf": r.home_goals, "ga": r.away_goals, "venue": "home"} for r in home]
     away_data = [{"date": r.date, "opponent": r.home_team, "gf": r.away_goals, "ga": r.home_goals, "venue": "away"} for r in away]
     all_matches = sorted(home_data + away_data, key=lambda x: x["date"], reverse=True)[:last_n]

@@ -31,8 +31,19 @@ def submit_result(body: ActualResult, db: Session = Depends(get_db)):
 
 
 @router.get("/predictions/history")
-def prediction_history(db: Session = Depends(get_db)):
-    preds = db.query(Prediction).order_by(Prediction.created_at.desc()).all()
+def prediction_history(season: str = None, limit: int = None, db: Session = Depends(get_db)):
+    """Predictions, newest first, optionally narrowed to one season.
+
+    The season filter exists so the dashboard's selector actually drives this
+    panel; without it the control was decorative here.
+    """
+    q = db.query(Prediction)
+    if season:
+        q = q.filter(Prediction.season == season)
+    q = q.order_by(Prediction.created_at.desc())
+    if limit:
+        q = q.limit(limit)
+    preds = q.all()
     return {"predictions": [
         {
             "id": p.id,
