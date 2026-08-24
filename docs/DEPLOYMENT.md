@@ -166,6 +166,19 @@ Set `DATABASE_URL` to a Neon connection string. That is the whole migration: the
 next boot finds an empty database, loads the baked snapshot into it, and creates
 the operator account from the environment.
 
+**Two things caught us doing this, both worth knowing:**
+
+*Setting an environment variable through the Render API does not redeploy the
+service.* The value appears in the dashboard while the running instance keeps the
+environment of its last deploy, so the app carried on using SQLite and a restart
+wiped a prediction exactly as before — which looks precisely like "Postgres lost
+the data". Always trigger a deploy after changing environment variables, and
+confirm from the logs that `[seed] empty database — loading snapshot` appeared.
+
+*Neon's connection URI already carries `sslmode=require`.* Appending another
+produces `invalid sslmode value: "('require', 'require')"`. Add the psycopg driver
+prefix, and only add `sslmode` if it is absent.
+
 It fixes two things at once. Password changes and reset tokens survive a restart,
 which is what makes self-service credentials possible at all. And **predictions
 stop being lost** — before this, every restart restored the snapshot and wiped
