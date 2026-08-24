@@ -90,13 +90,45 @@ export default function AccuracyTrend() {
   );
 }
 
+/* Two baselines, not one.
+ *
+ * A bare "53.6% correct" is uninterpretable. It reads as a failure to anyone who
+ * assumes a coin-flip floor, and as a triumph to anyone who does not know what is
+ * achievable. Both readings are wrong, and the difference between them is the
+ * whole question of whether this model can be trusted.
+ *
+ * So the figure is shown between the two numbers that bound it: the naive
+ * baseline it has to beat, and the bookmakers' closing line on the same fixtures,
+ * which is as close to a ceiling as this problem has. Measured over 7,980
+ * Premier League matches the market gets ~54.6% and always-picking-home ~44.7%.
+ * The entire space a model can compete in is about ten points wide.
+ *
+ * RPS is shown alongside because accuracy is not a proper scoring rule - it
+ * rewards overconfidence and ignores everything the model said about the other
+ * two outcomes. RPS is what the model is actually tuned against.
+ */
 function Headline({ headline }) {
   const edge = headline.correct_result_pct - headline.always_home_pct;
+  const market = headline.market_correct_pct;
+  const hasMarket = Number.isFinite(market);
+  const gap = hasMarket ? headline.correct_result_pct - market : null;
+
   return (
     <div style={{ display: "flex", gap: space.xxl, flexWrap: "wrap", marginBottom: space.lg }}>
-      <Figure label="Correct result" value={`${headline.correct_result_pct}%`} color={series.primary} />
       <Figure label="Always home" value={`${headline.always_home_pct}%`} color={C.slate500} />
-      <Figure label="Edge" value={`${edge > 0 ? "+" : ""}${edge.toFixed(1)} pts`} color={deltaColor(edge)} />
+      <Figure label="Correct result" value={`${headline.correct_result_pct}%`} color={series.primary} />
+      {hasMarket && (
+        <Figure label="Bookmakers, same fixtures" value={`${market}%`} color={C.slate500} />
+      )}
+      <Figure label="Edge over always-home" value={`${edge > 0 ? "+" : ""}${edge.toFixed(1)} pts`} color={deltaColor(edge)} />
+      {hasMarket && (
+        // Signed against the market: negative means the bookmakers did better,
+        // which is the expected and honest case rather than something to hide.
+        <Figure label="vs bookmakers" value={`${gap > 0 ? "+" : ""}${gap.toFixed(1)} pts`} color={deltaColor(gap)} />
+      )}
+      {Number.isFinite(headline.rps) && (
+        <Figure label="RPS (lower is better)" value={headline.rps.toFixed(4)} color={series.primary} />
+      )}
       <Figure label="Matches scored" value={headline.matches} color={C.slate500} />
     </div>
   );
