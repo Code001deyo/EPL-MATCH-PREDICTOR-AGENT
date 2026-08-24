@@ -209,6 +209,24 @@ server logs the failure **and the reset link**, so the operator can recover from
 the logs while the mail configuration is fixed. It never pretends to have sent
 something it did not.
 
+**Verified in production 2026-08-24:** `noreply@hanovatechnologies.co.ke` →
+`hanovatechnologies@gmail.com`, status `delivered` in Resend's own record. The
+token from that mail was then used once (200), reused (400) and the new password
+accepted at login (200).
+
+**The sender domain must be verified.** Resend's test sender only delivers to the
+account owner's own address, so before `hanovatechnologies.co.ke` was verified
+every reset was rejected with a 403 — and, by design, the endpoint still returned
+its normal generic response. The failure was visible **only in the server log**.
+That is the intended trade (the endpoint must not confirm which accounts exist),
+but it means mail delivery has to be checked from the logs or from Resend, never
+from the endpoint's status code.
+
+Domain verification needs three DNS records (a DKIM `TXT` on
+`resend._domainkey`, an `MX` on `send`, and an SPF `TXT` on `send`); Resend
+reports `not_started` → `pending` → `verified`, and `pending` is not good enough
+to send.
+
 ## Keeping results current
 
 `.github/workflows/refresh-data.yml` calls `POST /data/refresh` every 3 hours with
