@@ -1,0 +1,73 @@
+name: CI
+
+# Runs on every push and PR. The deploy workflow waits on this, so a red test
+# suite stops a deploy rather than being discovered after it.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Called by deploy-backend.yml so a deploy runs the same suite rather than a
+  # second, drifting copy of it.
+  workflow_call:
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt pytest
+
+      - name: Run tests
+        working-directory: backend
+        # DATA_DIR points at a scratch path: the suite must never touch the
+        # committed seed database.
+        env:
+          DATA_DIR: ${{ runner.temp }}/eplci
+        run: pytest tests/ -v
+
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # ci, not install: the build must use the exact locked tree. An unlocked
+      # install once shipped an image whose dependency tree had never been tested.
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: frontend
+        # CRA warnings are not failures here, but they are visible in the log.
+        run: npm run build
+
+  seed-artefacts:
+    name: Seed snapshot present
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The deployed backend has no persistent disk and relies on these being in
+      # the image. A .gitignore change that silently dropped them would otherwise
+      # only be noticed by a user hitting a 503 in production.
+      - name: Assert the baked snapshot is tracked
+        run: |
+          test -f backend/seed/epl.db || { echo "::error::backend/seed/epl.db is missing"; exit 1; }
+          test -f backend/seed/models/home_goals_model.pkl || { echo "::error::baked models are missing"; exit 1; }
+          echo "seed snapshot: $(du -sh backend/seed | cut -f1)"

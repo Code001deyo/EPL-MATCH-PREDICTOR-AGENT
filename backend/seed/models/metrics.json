@@ -1,0 +1,74 @@
+{
+  "estimator": {
+    "backend": "xgboost",
+    "version": "2.0.3",
+    "handles_missing_natively": true
+  },
+  "home_goals_mae": 0.9489,
+  "away_goals_mae": 0.8583,
+  "home_shots_mae": 3.5635,
+  "away_shots_mae": 3.4211,
+  "home_shots_ot_mae": 1.8232,
+  "away_shots_ot_mae": 1.6428,
+  "home_corners_mae": 2.1165,
+  "away_corners_mae": 2.0949,
+  "home_fouls_mae": 2.5725,
+  "away_fouls_mae": 2.7834,
+  "home_yellow_cards_mae": 0.9823,
+  "away_yellow_cards_mae": 1.0812,
+  "stat_coverage": {
+    "home_shots": 2660,
+    "away_shots": 2660,
+    "home_shots_ot": 2660,
+    "away_shots_ot": 2660,
+    "home_corners": 2660,
+    "away_corners": 2660,
+    "home_fouls": 2660,
+    "away_fouls": 2660,
+    "home_yellow_cards": 2660,
+    "away_yellow_cards": 2660
+  },
+  "baselines": {
+    "home_goals_constant_mae": 0.9968,
+    "home_goals_median_mae": 0.9897,
+    "away_goals_constant_mae": 0.8965,
+    "away_goals_median_mae": 0.7892,
+    "home_goals_form_mae": 1.0409,
+    "away_goals_form_mae": 0.9672,
+    "home_goals_poisson_mae": 0.9549,
+    "away_goals_poisson_mae": 0.8628,
+    "poisson_baseline": "team-strength (attack x defence x home advantage)",
+    "poisson_correct_result_pct": 47.3,
+    "poisson_log_loss": 1.0437,
+    "home_goals_beats_poisson": true,
+    "home_goals_beats_median": true,
+    "home_goals_beats_constant": true,
+    "home_goals_beats_form": true,
+    "home_goals_lost_to": [],
+    "away_goals_beats_poisson": true,
+    "away_goals_beats_median": false,
+    "away_goals_beats_constant": true,
+    "away_goals_beats_form": true,
+    "away_goals_lost_to": [
+      "median"
+    ]
+  },
+  "validation": {
+    "split": "season-holdout",
+    "train_rows": 2280,
+    "val_rows": 389,
+    "features": 55
+  },
+  "accuracy": {
+    "holdout_season": "2025-26",
+    "matches_scored": 389,
+    "correct_result_pct": 46.0,
+    "exact_score_pct": 9.5,
+    "always_home_pct": 43.4,
+    "beats_always_home": true,
+    "log_loss": 1.0413,
+    "base_rate_log_loss": 1.0815,
+    "beats_base_rate": true
+  },
+  "trained_at": "2026-08-24T10:43:44+00:00"
+}

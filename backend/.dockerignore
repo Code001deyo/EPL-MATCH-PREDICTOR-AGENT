@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+.git
+.gitignore
+.pytest_cache/
+*.db
+saved_models/*.json
+saved_models/*.pkl
+
+# The seed snapshot is the one set of artefacts that MUST reach the image — the
+# rules above would otherwise exclude both the .db and the .pkl files it holds.
+!seed/
+!seed/**
+.env

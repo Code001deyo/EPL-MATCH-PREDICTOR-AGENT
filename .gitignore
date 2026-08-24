@@ -15,9 +15,17 @@ venv/
 frontend/build/
 dist/
 
-# ML models
+# ML models — the working directory stays ignored...
 backend/saved_models/*.pkl
 backend/saved_models/*.joblib
+# Written by every training run; the committed copies live in backend/seed/models/.
+backend/saved_models/*.json
+
+# ...but backend/seed/ is a deliberate, committed snapshot: the database and
+# trained models baked into the deployed image so a host with no persistent disk
+# comes up working instead of untrained. ~6.5MB, small enough for plain git.
+!backend/seed/
+!backend/seed/**
 
 # Data
 data/*.csv

@@ -1,0 +1,17 @@
+# Normalise text in the repository, and let each platform check out what it wants.
+* text=auto
+
+# Except these, which must be LF wherever they land.
+#
+# entrypoint.sh runs inside a Linux container. A CRLF shebang makes the kernel
+# look for an interpreter named "/bin/sh\r", and the container dies with the
+# spectacularly unhelpful "no such file or directory" — naming a file that plainly
+# exists. This line is the fix, and it is not optional on a Windows checkout.
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+
+# Binary: never touched, never diffed as text.
+*.pkl           binary
+*.db            binary

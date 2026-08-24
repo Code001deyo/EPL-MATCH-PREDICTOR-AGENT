@@ -1,23 +1,57 @@
-version: "3.9"
-
 services:
   backend:
     build: ./backend
-    ports:
-      - "8001:8000"
+    # Port 8001 is no longer required: the browser reaches the API same-origin
+    # through the frontend's nginx /api proxy. Uncomment to hit the API directly
+    # for debugging, or to run the frontend dev server against it.
+    # ports:
+    #   - "8001:8000"
+    expose:
+      - "8000"
     volumes:
-      - db_data:/app/data
+      # NOT /app/data — that is the `data` Python package (ingestion, features,
+      # strength). Mounting a named volume there shadowed the source tree with
+      # whatever copy Docker captured when the volume was first created, so every
+      # code change after that was silently ignored and the backend crash-looped
+      # on ImportError for functions that exist in the repo.
+      - db_data:/app/dbdata
+      # Trained models live outside the image on purpose: .dockerignore excludes
+      # saved_models/*.pkl so a build never bakes in a stale model. Without a
+      # volume, though, every container restart came up untrained and /predict
+      # answered 503 "not trained yet" until someone retrained by hand. This
+      # keeps the models across restarts and rebuilds.
+      - models_data:/app/saved_models
     environment:
       - PYTHONUNBUFFERED=1
+      - DATA_DIR=/app/dbdata
+      # Background refresh of the in-progress season. 0 disables the loop.
+      - REFRESH_INTERVAL_HOURS=6
+    networks:
+      - eplnet
     restart: unless-stopped
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        # Compiled into the bundle by CRA. Same-origin, so the app works from any
+        # machine that can reach the frontend — not just a browser on the Docker host.
+        REACT_APP_API_BASE: /api
     ports:
       - "3000:80"
     depends_on:
-      - backend
+      backend:
+        # Waits for uvicorn to actually answer /health, not merely for the
+        # container process to exist, which is all the bare `depends_on` did.
+        condition: service_healthy
+    networks:
+      - eplnet
     restart: unless-stopped
+
+networks:
+  eplnet:
+    driver: bridge
 
 volumes:
   db_data:
+  models_data:

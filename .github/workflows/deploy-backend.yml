@@ -1,0 +1,102 @@
+name: Deploy backend to Hugging Face Spaces
+
+# The Space is its own git repo. This workflow stages the backend tree plus the
+# Space's README (which carries the HF config in YAML frontmatter) and pushes it
+# there; HF then builds the image itself.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+
+concurrency:
+  # Two deploys racing to force-push the same Space branch would leave whichever
+  # finished last, not whichever was newer.
+  group: deploy-backend
+  cancel-in-progress: false
+
+env:
+  HF_SPACE: ${{ vars.HF_SPACE }}          # e.g. yourname/epl-predictor-api
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check configuration
+        run: |
+          test -n "${HF_SPACE}" || { echo "::error::repository variable HF_SPACE is not set (expected owner/space-name)"; exit 1; }
+          test -n "${{ secrets.HF_TOKEN }}" || { echo "::error::repository secret HF_TOKEN is not set"; exit 1; }
+
+      - name: Stage the Space repo
+        run: |
+          set -e
+          mkdir -p /tmp/space
+          cp -r backend/. /tmp/space/
+          rm -rf /tmp/space/__pycache__ /tmp/space/.pytest_cache
+          # HF reads its configuration from README.md frontmatter and expects the
+          # Dockerfile at the repo root — which is why the backend subtree is
+          # pushed as the Space's root rather than the whole repository.
+          cat > /tmp/space/README.md <<'EOF'
+          ---
+          title: EPL Predictor API
+          emoji: ⚽
+          colorFrom: purple
+          colorTo: green
+          sdk: docker
+          app_port: 8000
+          pinned: false
+          ---
+
+          FastAPI + XGBoost backend for the EPL Score Predictor.
+
+          Deployed automatically from
+          [Code001deyo/EPL-MATCH-PREDICTOR-AGENT](https://github.com/Code001deyo/EPL-MATCH-PREDICTOR-AGENT).
+          Do not edit this Space directly — changes here are overwritten on the
+          next push to `main`.
+          EOF
+
+      - name: Push to the Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -e
+          cd /tmp/space
+          git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git lfs install --local || true
+          git add -A
+          git commit -q -m "Deploy from ${GITHUB_SHA::7}"
+          # Force-push: the Space mirrors main, it does not accumulate its own
+          # history. The token is only ever in the environment, never in a file
+          # and never echoed — hence the redirect on the push.
+          git push --force "https://user:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}" main >/dev/null 2>&1
+
+      - name: Wait for the deployed API to answer
+        run: |
+          set -e
+          # HF builds the image after the push, so this polls the real endpoint.
+          # A green push is not a green deploy: without this the job would report
+          # success while the Space was still failing to build.
+          host="https://$(echo "${HF_SPACE}" | tr '/' '-' | tr '[:upper:]' '[:lower:]').hf.space"
+          echo "Polling ${host}/health"
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "${host}/health" || true)
+            if [ "$code" = "200" ]; then
+              echo "Live after $((i*15))s"
+              curl -s "${host}/health"
+              exit 0
+            fi
+            echo "  attempt ${i}: HTTP ${code}"
+            sleep 15
+          done
+          echo "::error::${host}/health did not return 200 within 15 minutes — check the Space build logs"
+          exit 1
