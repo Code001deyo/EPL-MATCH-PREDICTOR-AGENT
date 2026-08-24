@@ -195,53 +195,106 @@ def load_season_from_api(season_label: str, season_id: int) -> pd.DataFrame:
     return df
 
 
-def _is_matchweek_corrupted(db) -> bool:
-    """True if Premier League matchweeks exceed a real campaign.
+# A matchweek label this high cannot come from any real English league campaign.
+#
+# It is NOT 38. The Premier League's own numbering legitimately runs past a
+# 38-round campaign when matches are rearranged: measured against the source,
+# 2006-07 and 2008-09 reach 39, 2012-13 reaches 39 and 2013-14 reaches 40 - each
+# with a correct and complete 380 fixtures. A ceiling of 38 therefore condemned
+# four perfectly good seasons as corrupt, which is what took production down.
+#
+# 60 sits above the Championship's 46 and far above any rearranged top-flight
+# season, while still catching the malformed output this guard was written for.
+# Completeness is not this guard's job either way - COMPLETE_SEASON_FIXTURES and
+# the `partial` check below own that, and they test the thing that actually
+# matters, which is whether all 380 fixtures are present.
+MAX_PLAUSIBLE_MATCHWEEK = 60
 
-    Scoped to E0 deliberately. This guard exists to catch an old algorithm that
-    produced matchweeks above 38, and it used to scan every division — so when the
-    Championship arrived with its 46 rounds, a perfectly correct E1 season read as
-    corruption and wiped the whole table on boot. Since the wipe is followed by a
-    reseed that re-adds those same 46-round rows, the next boot would have done it
-    again, forever.
 
-    38 is a Premier League campaign. The Championship's 46 is not this guard's
-    business.
+def _corrupt_matchweek_seasons(db) -> list[str]:
+    """Premier League seasons holding an impossible matchweek, as a list.
+
+    Returns the offending seasons rather than a bare boolean, because the caller
+    must delete *those* and nothing else.
+
+    ## Why this no longer answers yes/no
+
+    It used to, and the caller responded with `DELETE FROM match_results` — the
+    entire table, every division, every season. That is a heuristic with a
+    catastrophic action attached, and it fired in production the moment the
+    history was extended back to 2005-06: one bad season took out all 22, the
+    reseed then took the site down for several minutes, and because the reseed
+    restored whatever tripped the guard, the next boot did it again.
+
+    The docstring on the previous version warned about exactly this loop for the
+    Championship case and fixed it by narrowing the *query*. The action stayed
+    unscoped, so the same trap was one new data source away from reopening.
+
+    Deleting only the affected seasons converges: those are re-fetched, every
+    other season survives, and the site keeps answering. If a season is genuinely
+    unfixable it is re-deleted each boot, which is visible in the logs and costs
+    one season's ingestion rather than the whole database.
+
+    The Championship's 46 rounds are not this guard's business, which is why the
+    query stays scoped to E0 - and see MAX_PLAUSIBLE_MATCHWEEK for why the
+    threshold is not 38.
     """
     from sqlalchemy import func
-    result = (
-        db.query(func.max(MatchResult.matchweek))
+    rows = (
+        db.query(MatchResult.season, func.max(MatchResult.matchweek))
         .filter(MatchResult.division == "E0")
-        .scalar()
+        .group_by(MatchResult.season)
+        .all()
     )
-    return result is not None and result > 38
+    return sorted(
+        season for season, high in rows
+        if high is not None and high > MAX_PLAUSIBLE_MATCHWEEK
+    )
 
 
-def _is_date_format_legacy(db) -> bool:
-    """True if any row still holds a pre-P1 'DD/MM/YYYY' date.
+def _legacy_date_seasons(db) -> list[str]:
+    """Seasons still holding a pre-P1 'DD/MM/YYYY' date.
 
     Those rows cannot be reinterpreted in place — a lexical sort over mixed
-    formats is meaningless — so their presence forces a full reseed.
+    formats is meaningless — so they are re-fetched. Per season, not per table,
+    for the reason given in _corrupt_matchweek_seasons.
+
+    Not scoped to a division: a legacy date is wrong wherever it appears.
     """
-    row = db.query(MatchResult.date).filter(MatchResult.date.like("%/%")).first()
-    return row is not None
+    rows = (
+        db.query(MatchResult.season)
+        .filter(MatchResult.date.like("%/%"))
+        .distinct()
+        .all()
+    )
+    return sorted(season for (season,) in rows if season)
 
 
 def seed_database():
     init_db()
     db = SessionLocal()
 
-    # Wipe and reseed if matchweek data is corrupted (old algorithm produced > 38)
-    if _is_matchweek_corrupted(db):
-        print("Corrupted matchweek data detected (max > 38). Wiping and re-seeding...")
-        db.query(MatchResult).delete()
+    # Re-seed only the seasons that are actually wrong. Both guards below used to
+    # delete the whole table; see _corrupt_matchweek_seasons for what that cost.
+    corrupt = _corrupt_matchweek_seasons(db)
+    if corrupt:
+        print(
+            f"Matchweek above {MAX_PLAUSIBLE_MATCHWEEK} in Premier League "
+            f"season(s) {corrupt}; re-seeding those seasons only."
+        )
+        db.query(MatchResult).filter(
+            MatchResult.season.in_(corrupt), MatchResult.division == "E0"
+        ).delete(synchronize_session=False)
         db.commit()
 
     # P1: legacy DD/MM/YYYY rows sort by day-of-month, so every rolling window
     # built over them is wrong. Reseed rather than attempt an in-place rewrite.
-    if _is_date_format_legacy(db):
-        print("Legacy DD/MM/YYYY dates detected. Wiping and re-seeding in ISO format...")
-        db.query(MatchResult).delete()
+    legacy = _legacy_date_seasons(db)
+    if legacy:
+        print(f"Legacy DD/MM/YYYY dates in season(s) {legacy}; re-seeding those seasons only.")
+        db.query(MatchResult).filter(
+            MatchResult.season.in_(legacy)
+        ).delete(synchronize_session=False)
         db.commit()
 
     season_ids = get_season_ids()
