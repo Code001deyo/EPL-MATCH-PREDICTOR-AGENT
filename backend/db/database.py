@@ -97,6 +97,12 @@ class MatchResult(Base):
     away_goals = Column(Integer)
     home_xg = Column(Real)
     away_xg = Column(Real)
+    # Closing 1X2 prices. NULL before 2005-06, and NULL for any fixture whose
+    # bookmaker line the source did not carry — absent odds must read as absent,
+    # never as evens.
+    odds_home = Column(Real, nullable=True)
+    odds_draw = Column(Real, nullable=True)
+    odds_away = Column(Real, nullable=True)
     home_shots_ot = Column(Integer)
     away_shots_ot = Column(Integer)
     home_possession = Column(Real)
@@ -159,6 +165,12 @@ class Backtest(Base):
     draw_prob = Column(Real)
     away_win_prob = Column(Real)
     confidence = Column(Real)
+    # The bookmaker's closing price for this same fixture, copied in so the
+    # market's accuracy can be reported on exactly the rows the model was scored
+    # on. Not an input to anything - odds are deliberately not model features.
+    odds_home = Column(Real, nullable=True)
+    odds_draw = Column(Real, nullable=True)
+    odds_away = Column(Real, nullable=True)
     run_at = Column(Text)
 
 
@@ -222,6 +234,17 @@ def migrate_db():
         ("match_results", "away_red_cards", "INTEGER"),
         ("match_results", "division", "TEXT"),
         ("match_results", "stats_source", "TEXT"),
+        # Closing bookmaker odds. REAL, not INTEGER — these are decimal prices
+        # (1.85, 3.40) and an integer column would round every one of them to a
+        # meaningless value. They were being parsed out of the source CSV and
+        # discarded here, which threw away the single strongest predictor of a
+        # match result that exists.
+        ("match_results", "odds_home", "REAL"),
+        ("match_results", "odds_draw", "REAL"),
+        ("match_results", "odds_away", "REAL"),
+        ("backtests", "odds_home", "REAL"),
+        ("backtests", "odds_draw", "REAL"),
+        ("backtests", "odds_away", "REAL"),
         ("predictions", "predicted_stats", "TEXT"),
         ("predictions", "updated_at", "TEXT"),
         ("predictions", "times_predicted", "INTEGER"),

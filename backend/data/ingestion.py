@@ -22,9 +22,25 @@ PL_HEADERS = {
 # Premier League competition id in the PulseLive API
 PL_COMPETITION_ID = 1
 
-# Earliest season we train on. Seasons before this are ignored even if the API
-# offers them (the API goes back to 1992-93, which is not useful training data).
-EARLIEST_SEASON = "2019-20"
+# Earliest season we train on.
+#
+# Was 2019-20, on the stated grounds that older seasons are "not useful training
+# data". That was an assumption, and measurement contradicted it: seven seasons is
+# a thin base for a 60-feature model, and the source carries far more.
+#
+# 2005-06 is not an arbitrary earlier date. It is the first season for which
+# football-data.co.uk publishes **both** the full statistics block (shots, shots
+# on target, corners, fouls, cards - available from 2000-01) **and** bookmaker
+# odds (from 2005-06). Odds are the model's strongest feature, so starting here
+# means every training row can carry every feature rather than a fifth of the
+# history being systematically blind in its most important column.
+#
+# Going back further is possible - the archive reaches 1993-94 - but 2000-05
+# would add rows with no market price, and pre-2000 rows with no match statistics
+# at all. That is a decision to revisit with a measurement, not a default.
+#
+# Effect: E0 training rows go from ~2,660 to ~7,980.
+EARLIEST_SEASON = "2005-06"
 
 # 20 clubs x 38 rounds. Used to tell a completed season from a half-seeded one.
 COMPLETE_SEASON_FIXTURES = 380

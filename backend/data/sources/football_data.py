@@ -36,6 +36,12 @@ STAT_COLUMNS = {
     "AY": "away_yellow_cards",
     "HR": "home_red_cards",
     "AR": "away_red_cards",
+    # Added by the source for 2026-27 and absent from every earlier file, so
+    # these are NULL for all history. Mapped anyway: an absent column already
+    # normalises to NA, and the alternative is noticing in a year's time that a
+    # published field was being ignored.
+    "HxG": "home_xg",
+    "AxG": "away_xg",
 }
 
 ODDS_COLUMNS = {"B365H": "odds_home", "B365D": "odds_draw", "B365A": "odds_away"}

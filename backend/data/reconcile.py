@@ -15,6 +15,7 @@ from .sources import fetch_season, validate_clubs, SeasonFileUnavailable
 # late kickoff can land on either side of midnight. Allow a one-day window.
 DATE_TOLERANCE_DAYS = 1
 
+# Counts. These are whole things — shots, cards — so they coerce to int.
 STAT_FIELDS = [
     "home_shots", "away_shots",
     "home_shots_ot", "away_shots_ot",
@@ -22,6 +23,15 @@ STAT_FIELDS = [
     "home_fouls", "away_fouls",
     "home_yellow_cards", "away_yellow_cards",
     "home_red_cards", "away_red_cards",
+]
+
+# Measurements. Kept apart from STAT_FIELDS because they must NOT go through
+# `_coerce`, which returns int: decimal odds of 1.85 would be stored as 1, and
+# an expected-goals figure of 2.3 as 2. Both would look like plausible data and
+# be silently wrong, which is worse than being absent.
+REAL_FIELDS = [
+    "odds_home", "odds_draw", "odds_away",
+    "home_xg", "away_xg",
 ]
 
 
@@ -39,6 +49,27 @@ def _index_stats(df) -> dict:
     for row in df.itertuples():
         index[(row.home_team, row.away_team, row.date)] = row
     return index
+
+
+def _coerce_real(value):
+    """Source cell -> float or None. Never a default.
+
+    Zero is rejected as well as NaN: a decimal odd of 0.0 is not a price, it is
+    an empty cell that survived parsing, and feeding it to a model as `1/odds`
+    would divide by zero.
+    """
+    if value is None:
+        return None
+    try:
+        if value != value:  # NaN
+            return None
+    except TypeError:
+        pass
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
 
 
 def _coerce(value):
@@ -113,6 +144,8 @@ def enrich_season(db, season_label: str, division: str = "E0") -> dict:
 
         for field in STAT_FIELDS:
             setattr(fixture, field, _coerce(getattr(match, field, None)))
+        for field in REAL_FIELDS:
+            setattr(fixture, field, _coerce_real(getattr(match, field, None)))
         fixture.stats_source = "football-data.co.uk"
         fixture.division = division
         report["matched"] += 1

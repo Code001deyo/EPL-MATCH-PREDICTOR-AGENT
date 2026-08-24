@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from db.database import MatchResult
 from .calibration import translate, prior_weight
 from .strength import StrengthIndex, strength_features, STRENGTH_FEATURES
+from .odds import odds_feature_dict
 
 # Rolling features produced per team. Kept as a named list so an unknown team
 # yields exactly this set as NaN — no silent shape mismatch between the
@@ -93,6 +94,7 @@ def _build_match_frame(db: Session) -> pd.DataFrame:
         "home_team": r.home_team, "away_team": r.away_team,
         "home_goals": r.home_goals, "away_goals": r.away_goals,
         "home_xg": r.home_xg, "away_xg": r.away_xg,
+        "odds_home": r.odds_home, "odds_draw": r.odds_draw, "odds_away": r.odds_away,
         "home_shots_ot": r.home_shots_ot, "away_shots_ot": r.away_shots_ot,
         "home_shots": r.home_shots, "away_shots": r.away_shots,
         "home_corners": r.home_corners, "away_corners": r.away_corners,
@@ -305,11 +307,18 @@ class TeamIndex:
 
 def build_feature_vector(df: pd.DataFrame, home_team: str, away_team: str,
                          before_date: str, strength: "StrengthIndex | None" = None,
-                         index: "TeamIndex | None" = None) -> dict:
+                         index: "TeamIndex | None" = None,
+                         odds: tuple | None = None) -> dict:
     """Feature vector for one fixture, using only matches before `before_date`.
 
     `strength` and `index` are optional so a single prediction can build its own;
     pass shared ones when looping, since each is a full pass over history.
+
+    `odds` is the fixture's own pre-match (home, draw, away) decimal prices. It is
+    passed in rather than looked up because the two callers get it from different
+    places: training reads the stored closing price off the match row, while a
+    live prediction has to fetch a price for a fixture that has not been played.
+    Absent odds become NaN features, never a neutral prior - see data/odds.py.
     """
     if index is None:
         index = TeamIndex(df)
@@ -376,6 +385,10 @@ def build_feature_vector(df: pd.DataFrame, home_team: str, away_team: str,
     features["home_matches_last_14"] = _matches_in_window(home_df, home_team, before_date, 14)
     features["away_matches_last_14"] = _matches_in_window(away_df, away_team, before_date, 14)
 
+    # Pre-match market prices. Unlike everything above these describe the fixture
+    # itself rather than the clubs' histories, so they are supplied by the caller.
+    features.update(odds_feature_dict(*(odds or (None, None, None))))
+
     return features
 
 
@@ -402,8 +415,13 @@ def build_training_matrix(df: pd.DataFrame, target_division: str = "E0"):
 
     records = []
     for _, row in targets.iterrows():
-        feats = build_feature_vector(df, row["home_team"], row["away_team"], row["date"],
-                                     strength=strength, index=index)
+        feats = build_feature_vector(
+            df, row["home_team"], row["away_team"], row["date"],
+            strength=strength, index=index,
+            # The stored closing price for this very fixture. Not leakage: it was
+            # fixed before kick-off and encodes nothing about the result.
+            odds=(row.get("odds_home"), row.get("odds_draw"), row.get("odds_away")),
+        )
         feats["season"] = row.get("season")
         # Identifiers, not features — FEATURE_COLS is an explicit allow-list, so
         # these are ignored by training. They are carried so the team-strength

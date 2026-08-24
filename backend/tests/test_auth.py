@@ -18,14 +18,39 @@ import auth
 import ratelimit
 
 
+class _StoredAdmin:
+    """Stands in for the `admin_users` row auth now looks up."""
+
+    def __init__(self, username="admin", epoch=1):
+        self.username = username
+        self.session_epoch = epoch
+        self.password_hash = auth.hash_password("correct-horse-battery")
+
+
 @pytest.fixture
 def configured(monkeypatch):
-    """A server with admin auth fully configured."""
+    """A server with admin auth fully configured.
+
+    The account moved from environment variables into the database, so these
+    tests have to supply the stored row as well as the environment. They fake the
+    two lookups rather than opening a database: what is under test here is the
+    session and API-key logic, and pointing it at the developer's real SQLite file
+    made the outcome depend on whether that file happened to have been migrated —
+    which is exactly why these four tests were failing.
+    """
     monkeypatch.setenv("ADMIN_USERNAME", "admin")
     monkeypatch.setenv("ADMIN_PASSWORD_HASH", auth.hash_password("correct-horse-battery"))
     monkeypatch.setenv("SESSION_SECRET", "test-secret-not-used-anywhere-real")
     monkeypatch.setenv("ADMIN_API_KEY", "test-api-key")
-    yield
+
+    import db.adminuser as adminuser
+    stored = _StoredAdmin()
+    monkeypatch.setattr(adminuser, "has_admin", lambda _db: True)
+    monkeypatch.setattr(
+        adminuser, "get_by_username",
+        lambda _db, name: stored if name == stored.username else None,
+    )
+    yield stored
 
 
 class FakeRequest:
@@ -56,6 +81,18 @@ class TestPasswordHashing:
         assert auth.verify_password("anything", bad) is False
 
 
+class TestStaleSession:
+    """A session signed at an old epoch must be refused even though its signature
+    is perfectly valid — this is what makes a password change sign others out."""
+
+    def test_superseded_epoch_is_rejected(self, configured):
+        token = auth.issue_session("admin", configured.session_epoch)
+        configured.session_epoch += 1          # as a password change would do
+        with pytest.raises(HTTPException) as exc:
+            auth.require_admin(FakeRequest(cookies={auth.COOKIE_NAME: token}))
+        assert exc.value.status_code == 401
+
+
 class TestFailsClosed:
     """The property that matters most: an unconfigured server must deny admin
     actions, not allow them."""
@@ -82,7 +119,7 @@ class TestFailsClosed:
 
 class TestSessions:
     def test_valid_session_is_accepted(self, configured):
-        token = auth.issue_session("admin")
+        token = auth.issue_session("admin", configured.session_epoch)
         assert auth.require_admin(FakeRequest(cookies={auth.COOKIE_NAME: token})) == "admin"
 
     def test_no_cookie_is_401(self, configured):
@@ -91,18 +128,18 @@ class TestSessions:
         assert exc.value.status_code == 401
 
     def test_tampered_token_is_rejected(self, configured):
-        token = auth.issue_session("admin")
+        token = auth.issue_session("admin", configured.session_epoch)
         tampered = token[:-3] + ("aaa" if not token.endswith("aaa") else "bbb")
         assert auth.read_session(tampered) is None
 
     def test_token_signed_with_another_secret_is_rejected(self, configured, monkeypatch):
         """The signature, not the shape of the token, is what is trusted."""
-        token = auth.issue_session("admin")
+        token = auth.issue_session("admin", configured.session_epoch)
         monkeypatch.setenv("SESSION_SECRET", "a-completely-different-secret")
         assert auth.read_session(token) is None
 
     def test_expired_token_is_rejected(self, configured, monkeypatch):
-        token = auth.issue_session("admin")
+        token = auth.issue_session("admin", configured.session_epoch)
         monkeypatch.setattr(auth, "SESSION_MAX_AGE", -1)
         assert auth.read_session(token) is None
 

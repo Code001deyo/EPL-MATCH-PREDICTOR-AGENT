@@ -25,7 +25,9 @@ from sqlalchemy.orm import Session
 
 from data.features import load_matches, build_training_matrix
 from models.backend import make_model, fit, clean_matrix
-from models.ml_model import FEATURE_COLS, _poisson_probs, _argmax_outcome, _confidence
+from models.ml_model import (
+    FEATURE_COLS, _poisson_probs, _argmax_outcome, _confidence, most_likely_scoreline,
+)
 from db.database import Backtest
 
 # A matchweek is only backtested if at least this many earlier matches exist
@@ -71,11 +73,23 @@ def _build_matrix(db: Session):
         if col not in feat_df.columns:
             feat_df[col] = np.nan
 
-    meta = e0[["id", "date", "season", "matchweek", "home_team", "away_team"]].copy()
+    meta = e0[["id", "date", "season", "matchweek", "home_team", "away_team",
+               "odds_home", "odds_draw", "odds_away"]].copy()
     X = clean_matrix(feat_df[FEATURE_COLS].values)
     y_home = feat_df["home_goals"].values.astype(float)
     y_away = feat_df["away_goals"].values.astype(float)
     return meta, feat_df, X, y_home, y_away
+
+
+def _as_optional_float(value):
+    """pandas NaN -> None, so an absent price is stored as NULL rather than as the
+    float nan, which SQLite accepts and every consumer then has to re-check."""
+    try:
+        if value is None or value != value:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _predict_fold(X, y_home, y_away, feat_df, meta, train_idx, predict_idx):
@@ -87,6 +101,11 @@ def _predict_fold(X, y_home, y_away, feat_df, meta, train_idx, predict_idx):
         h_lambda = max(float(home_model.predict(X[i:i + 1])[0]), 0.1)
         a_lambda = max(float(away_model.predict(X[i:i + 1])[0]), 0.1)
         home_p, draw_p, away_p = _poisson_probs(h_lambda, a_lambda)
+        # Same decision rule as the live path. If these two ever diverge again the
+        # backtest stops measuring the product and starts measuring something the
+        # user is never shown, which is how a 48% prediction came to be reported
+        # as 53%.
+        pred_home, pred_away, _outcome = most_likely_scoreline(h_lambda, a_lambda)
         confidence = _confidence(h_lambda, a_lambda, feat_df.iloc[i].to_dict())
         r = meta.iloc[i]
         rows.append({
@@ -96,14 +115,19 @@ def _predict_fold(X, y_home, y_away, feat_df, meta, train_idx, predict_idx):
             "date": r["date"],
             "home_team": r["home_team"],
             "away_team": r["away_team"],
-            "predicted_home": int(round(h_lambda)),
-            "predicted_away": int(round(a_lambda)),
+            "predicted_home": pred_home,
+            "predicted_away": pred_away,
             "actual_home": int(y_home[i]),
             "actual_away": int(y_away[i]),
             "home_win_prob": home_p,
             "draw_prob": draw_p,
             "away_win_prob": away_p,
             "confidence": confidence,
+            # Carried, never consumed by the model. Lets the summary report what
+            # the bookmakers made of the same fixture.
+            "odds_home": _as_optional_float(r["odds_home"]),
+            "odds_draw": _as_optional_float(r["odds_draw"]),
+            "odds_away": _as_optional_float(r["odds_away"]),
             "predicted_outcome": _argmax_outcome(home_p, draw_p, away_p),
             "actual_outcome": _argmax_outcome(
                 1.0 if y_home[i] > y_away[i] else 0.0,
@@ -175,6 +199,8 @@ def _store_results(db: Session, results: list) -> None:
             actual_home=r["actual_home"], actual_away=r["actual_away"],
             home_win_prob=r["home_win_prob"], draw_prob=r["draw_prob"],
             away_win_prob=r["away_win_prob"], confidence=r["confidence"],
+            odds_home=r.get("odds_home"), odds_draw=r.get("odds_draw"),
+            odds_away=r.get("odds_away"),
             run_at=run_at,
         ))
     db.commit()
