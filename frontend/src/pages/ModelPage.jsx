@@ -5,7 +5,6 @@ import KpiCard from "../components/ui/KpiCard";
 import Card from "../components/ui/Card";
 import SectionTitle from "../components/ui/SectionTitle";
 import EmptyState from "../components/ui/EmptyState";
-import RetrainPanel from "../components/model/RetrainPanel";
 import ModelArchitecture from "../components/model/ModelArchitecture";
 import { C, type, space } from "../theme";
 import { series, axis, grid, tooltipStyle, legendStyle } from "../components/charts/chartTheme";
@@ -56,7 +55,8 @@ export default function ModelPage() {
       <div style={{ marginBottom: space.xl }}>
         <div style={{ ...type.page, color: C.navy }}>Model Performance</div>
         <div style={{ fontSize: 13, color: C.slate400, marginTop: 2 }}>
-          Backtested accuracy and live-settled accuracy, reported separately
+          Backtested accuracy and live-settled accuracy, reported separately.
+          {" "}Training is an operator action and lives in the admin area.
         </div>
       </div>
 
@@ -143,10 +143,6 @@ export default function ModelPage() {
             <EmptyState kind="not-measured" title="No monthly data yet" />
           )}
         </Card>
-      </div>
-
-      <div style={{ marginBottom: space.xl }}>
-        <RetrainPanel onComplete={fetchPerf} />
       </div>
 
       <ModelArchitecture />

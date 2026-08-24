@@ -81,6 +81,53 @@ scripts directory that is not on PATH - it prints a warning about this that is e
 to miss. The deploy script looks there itself, including the Windows
 `%APPDATA%\Python\PythonXY\Scripts` form converted with `cygpath` for Git Bash.
 
+## Admin access
+
+The public site is predictions plus the read-only views. Anything that can change
+the model or the data — retrain, backtest, data refresh — requires an admin.
+
+Credentials live in **environment variables, not the database**: the free instance
+has no persistent disk, so an accounts table would reset to the baked snapshot on
+every restart and admins created after a deploy would silently disappear.
+
+Generate them locally, then paste the output into Render → your service →
+Environment:
+
+```bash
+python scripts/make-admin-hash.py
+```
+
+| Variable | Purpose |
+|---|---|
+| `ADMIN_USERNAME` | the single admin account |
+| `ADMIN_PASSWORD_HASH` | scrypt hash — the password itself is never stored |
+| `SESSION_SECRET` | signs the session cookie |
+| `ADMIN_API_KEY` | lets the scheduled refresh authenticate without a cookie |
+| `ALLOWED_ORIGINS` | comma-separated; defaults to localhost + the Vercel origin |
+
+`ADMIN_API_KEY` also goes in GitHub → Settings → Secrets → Actions, and the API
+base URL in Settings → Variables as `API_BASE_URL`, so the refresh workflow can run.
+
+**Auth fails closed.** With those variables unset, admin endpoints return 503 and
+nobody can retrain — including you. A missing secret must never be read as "no
+authentication required". The public site is unaffected.
+
+**There is no password reset.** One account, reachable from the internet, with no
+lockout beyond a rate limit — a self-service reset would be a bigger hole than it
+closes. Losing the password means editing the env var again.
+
+## Keeping results current
+
+`.github/workflows/refresh-data.yml` calls `POST /data/refresh` every 3 hours with
+`X-Admin-Key`. This exists because the free instance sleeps after 15 minutes idle,
+so the in-process 6-hourly loop only advances while somebody is on the site — after
+a late kickoff the results would otherwise sit stale until the next visitor arrived.
+The workflow wakes the instance first, and fails loudly rather than reporting a
+green run that refreshed nothing.
+
+Free: GitHub Actions is unmetered on public repositories. Render's own cron jobs are
+a paid feature and are deliberately not used.
+
 ## Limits that will actually be hit
 
 These are measured or documented constraints, not hypotheticals.
@@ -110,6 +157,16 @@ browser polls `/model/jobs/{id}`. Any *synchronous* long endpoint added later wo
 time out at the proxy while succeeding on the backend - the precise failure that
 made a successful 321-second retrain report "Retrain failed". Keep long work behind
 the job API.
+
+**Concurrency is fixed but not unlimited.** Measured locally: ten simultaneous
+predictions used to return 0 successes and ten `database is locked` errors; they
+now return 10/10 in 4.3s, and a single prediction dropped from 4.56s to 0.84s.
+Reproduce with `python scripts/loadtest.py <api-base> 10`. Requests still serialise
+on one worker, so on 0.1 vCPU expect the same shape at several times the latency.
+
+**Rate limiting is per-process.** It resets on restart and would not be shared
+across workers. That makes it a spam brake, not a boundary against a determined
+attacker; anything stronger needs shared state this project does not pay for.
 
 **Retrain on the free instance will be slow.** It measures ~250s locally with far
 more CPU than 0.1 vCPU. It fits in memory, but expect it to take considerably

@@ -1,0 +1,71 @@
+name: Refresh live data
+
+# Keeps the deployed database current after matches are played.
+#
+# The backend already runs a 6-hourly refresh loop in-process, but the free Render
+# instance sleeps after 15 minutes without traffic — so that loop only advances
+# while somebody is using the site. After a late kickoff the results would sit
+# stale until the next visitor happened to arrive and wake it.
+#
+# This workflow wakes the instance and triggers the refresh on a schedule. It is
+# free: GitHub Actions has no usage limit on public repositories, whereas Render's
+# own cron jobs are a paid feature.
+on:
+  schedule:
+    # Every 3 hours. Premier League matches finish across a wide window and the
+    # refresh is cheap, so the interval is set by "how stale is acceptable"
+    # rather than by cost.
+    - cron: "0 */3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  # Refresh is atomic and single-flight server-side, so an overlap is harmless —
+  # but queueing two identical runs wastes a cold start on a sleeping instance.
+  group: refresh-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check configuration
+        run: |
+          test -n "${{ secrets.ADMIN_API_KEY }}" || { echo "::error::repository secret ADMIN_API_KEY is not set"; exit 1; }
+          test -n "${{ vars.API_BASE_URL }}" || { echo "::error::repository variable API_BASE_URL is not set"; exit 1; }
+
+      - name: Wake the instance
+        # A sleeping free instance takes about a minute to come back. Waking it
+        # first means the refresh call itself is not competing with a cold start.
+        env:
+          API: ${{ vars.API_BASE_URL }}
+        run: |
+          for i in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$API/health" || true)
+            [ "$code" = "200" ] && { echo "awake after $((i*10))s"; exit 0; }
+            echo "  attempt $i: HTTP $code"
+            sleep 10
+          done
+          echo "::error::$API/health did not respond within 2 minutes"
+          exit 1
+
+      - name: Refresh
+        env:
+          API: ${{ vars.API_BASE_URL }}
+          KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          # --fail-with-body so an auth failure or a 5xx fails the job loudly
+          # instead of being a green run that silently refreshed nothing.
+          curl -sS --fail-with-body --max-time 300             -X POST "$API/data/refresh"             -H "X-Admin-Key: $KEY"             -o response.json
+          cat response.json
+          # A published season must report "refreshed". "season-not-published" is
+          # the legitimate pre-season case; anything else is a silent failure.
+          grep -qE '"status" *: *"(refreshed|season-not-published)"' response.json             || { echo "::error::unexpected refresh status"; exit 1; }
+
+      - name: Confirm the data is actually current
+        env:
+          API: ${{ vars.API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          curl -sS --fail --max-time 60 "$API/data/freshness" -o freshness.json
+          cat freshness.json

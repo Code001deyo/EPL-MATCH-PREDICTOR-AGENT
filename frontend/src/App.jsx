@@ -10,13 +10,22 @@ import Analytics from "./pages/Analytics";
 import Teams from "./pages/Teams";
 import History from "./pages/History";
 import ModelPage from "./pages/ModelPage";
+import AdminLogin from "./pages/admin/Login";
+import AdminHome from "./pages/admin/AdminHome";
+import RequireAdmin from "./components/RequireAdmin";
+import { AuthProvider } from "./hooks/useAuth";
 import { C, SIDEBAR_W } from "./theme";
 import { useIsNarrow } from "./hooks/useBreakpoint";
 
 export default function App() {
   return (
     <Router>
-      <Shell />
+      {/* Inside the Router so the guard can redirect, and outside Shell so the
+          sidebar and the pages read one shared session rather than each asking
+          the server independently. */}
+      <AuthProvider>
+        <Shell />
+      </AuthProvider>
     </Router>
   );
 }
@@ -43,6 +52,11 @@ function Shell() {
             <Route path="/teams"     element={<Teams />} />
             <Route path="/history"   element={<History />} />
             <Route path="/model"     element={<ModelPage />} />
+
+            {/* Admin. The guard is convenience — every one of these endpoints is
+                enforced server-side, so a hand-typed URL gains nothing. */}
+            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/admin"       element={<RequireAdmin><AdminHome /></RequireAdmin>} />
           </Routes>
         </main>
       </div>
