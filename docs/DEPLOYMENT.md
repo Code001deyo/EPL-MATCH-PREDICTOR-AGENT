@@ -71,6 +71,12 @@ hf auth login                      # or: export HF_TOKEN=...
 ./scripts/deploy-hf.sh <owner>/<space-name>
 ```
 
+If `hf` is "not found" straight after installing it, pip put it in a per-user
+scripts directory that is not on PATH — it prints a warning about this that is
+easy to miss. The deploy script looks in that directory itself (including the
+Windows `%APPDATA%\Python\PythonXY\Scripts` form, converted with `cygpath` for
+Git Bash), so it will find a correct install even when your shell cannot.
+
 The script creates the Space if it does not exist, stages the tree, uploads it,
 then **polls the deployed `/health` until it answers** and prints the host to put
 in `frontend/vercel.json`. It reads the token from your `hf auth` session or
