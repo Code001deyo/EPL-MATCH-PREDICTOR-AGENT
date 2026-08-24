@@ -76,7 +76,23 @@ export default function Sidebar() {
           ))}
         </nav>
         <div style={{ padding: "16px 20px", borderTop: `1px solid ${C.navyLight}`, ...type.micro, fontWeight: 400, color: C.slate500 }}>
-          Data: Premier League API
+          <div>Data: Premier League API</div>
+          {/* rel="noopener noreferrer" is not boilerplate here: target="_blank"
+              otherwise hands the opened page a window.opener handle back into
+              this one. */}
+          <div style={{ marginTop: 8 }}>
+            Developed by{" "}
+            <a
+              href="https://hanovatechnologies.co.ke"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: C.blue, textDecoration: "none", fontWeight: 600 }}
+              onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }}
+            >
+              Hanova Technologies
+            </a>
+          </div>
         </div>
       </aside>
     </>
