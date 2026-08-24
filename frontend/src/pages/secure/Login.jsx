@@ -1,8 +1,10 @@
 import { useState } from "react";
+import axios from "axios";
 import Card from "../../components/ui/Card";
 import EmptyState from "../../components/ui/EmptyState";
 import useAuth from "../../hooks/useAuth";
 import { C, radius, space, type, semantic } from "../../theme";
+import { API } from "../../config";
 
 export default function AdminLogin() {
   const { login, admin, configured, loading } = useAuth();
@@ -67,6 +69,8 @@ export default function AdminLogin() {
               </div>
             )}
 
+            <Forgot username={username} />
+
             <button type="submit" disabled={busy || !username || !password} style={{
               width: "100%", padding: "10px 16px", borderRadius: radius.sm, border: "none",
               background: busy || !username || !password ? C.slate300 : C.navy,
@@ -97,5 +101,57 @@ function Field({ label, value, onChange, type: inputType = "text", ...rest }) {
         {...rest}
       />
     </div>
+  );
+}
+
+
+/* Request a reset link.
+ *
+ * The confirmation is deliberately the same whether or not the account exists —
+ * the server answers identically for both, and saying anything more specific here
+ * would reintroduce the username oracle the endpoint was written to avoid.
+ *
+ * It also does not promise delivery. If the mail service is misconfigured the
+ * server logs the link and the caller still sees this message, so the wording
+ * says what was requested rather than what arrived. */
+function Forgot({ username }) {
+  const [state, setState] = useState("idle");   // idle | asking | sent
+
+  const request = async () => {
+    setState("asking");
+    try {
+      await axios.post(`${API}/auth/forgot`, { username });
+    } catch {
+      // Even a failure here must not distinguish cases; the operator is told the
+      // same thing and the server log carries the detail.
+    }
+    setState("sent");
+  };
+
+  if (state === "sent") {
+    return (
+      <div style={{ ...type.micro, fontWeight: 400, color: C.slate500, marginBottom: space.md, lineHeight: 1.5 }}>
+        If that account exists, a reset link has been sent to the address on file.
+        The link works once and expires in 30 minutes.
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={request}
+      disabled={!username || state === "asking"}
+      title={username ? "" : "Enter your username first"}
+      style={{
+        background: "none", border: "none", padding: 0, marginBottom: space.md,
+        ...type.micro, fontWeight: 400,
+        color: username ? C.slate500 : C.slate300,
+        cursor: username ? "pointer" : "default",
+        textDecoration: "underline",
+      }}
+    >
+      {state === "asking" ? "Sending…" : "Forgot password?"}
+    </button>
   );
 }

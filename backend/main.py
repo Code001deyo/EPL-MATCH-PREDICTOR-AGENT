@@ -65,6 +65,28 @@ def startup():
     looked hung. Readiness is reported at /health/ready instead.
     """
     init_db()
+
+    # Load the baked snapshot before anything else runs. On Postgres this replaces
+    # the file copy in entrypoint.sh, which restores a SQLite file and therefore
+    # does nothing when DATABASE_URL points elsewhere. Both paths exist so a cold
+    # instance answers /predict immediately instead of returning 503 while it
+    # rebuilds from the network.
+    from db.seedload import load_snapshot_if_empty
+    try:
+        load_snapshot_if_empty()
+    except Exception as exc:
+        # A failed snapshot load must not stop the app booting — ingestion will
+        # rebuild from the network, slowly but correctly.
+        print(f"[seed] snapshot load failed ({type(exc).__name__}: {exc}); rebuilding from source instead")
+
+    # Create the operator account from the environment if none exists yet. Never
+    # overwrites an existing one — see db/adminuser.py.
+    from db.adminuser import bootstrap
+    try:
+        bootstrap()
+    except Exception as exc:
+        print(f"[auth] operator bootstrap skipped: {type(exc).__name__}: {exc}")
+
     lifecycle.start()
 
 

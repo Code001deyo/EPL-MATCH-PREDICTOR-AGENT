@@ -8,11 +8,33 @@ import os
 # Container default; override with DATA_DIR to run the API outside Docker.
 DATA_DIR = os.environ.get("DATA_DIR", "/app/dbdata")
 os.makedirs(DATA_DIR, exist_ok=True)
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL", f"sqlite:///{os.path.join(DATA_DIR, 'epl.db')}"
-)
+# `os.environ.get(key, default)` returns the DEFAULT only when the key is absent —
+# a key present but empty yields "", not the default. docker-compose and Render
+# both pass an unset variable through as an empty string, so an env var that is
+# merely declared would hand SQLAlchemy "" and crash the process on boot with
+# "Could not parse SQLAlchemy URL from string ''". Empty must mean unset.
+DATABASE_URL = (os.environ.get("DATABASE_URL") or "").strip() or     f"sqlite:///{os.path.join(DATA_DIR, 'epl.db')}"
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+IS_SQLITE = DATABASE_URL.startswith("sqlite")
+
+if IS_SQLITE:
+    # check_same_thread is a SQLite driver argument; psycopg rejects it outright,
+    # so it cannot be passed unconditionally.
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+else:
+    # pool_pre_ping is not optional against Neon. Neon suspends compute after a
+    # short idle period, so a pooled connection is routinely found dead on the
+    # first query after a quiet spell — without the ping that surfaces as an
+    # intermittent 500 rather than a transparent reconnect.
+    engine = create_engine(
+        DATABASE_URL,
+        pool_pre_ping=True,
+        pool_recycle=300,
+        # One uvicorn worker on a small instance; a large pool would hold
+        # connections Neon counts against the free plan for no benefit.
+        pool_size=5,
+        max_overflow=5,
+    )
 
 
 @event.listens_for(engine, "connect")
@@ -40,6 +62,10 @@ def _sqlite_pragmas(dbapi_connection, _record):
     harmless and means a database restored from the seed snapshot is migrated to
     WAL on first use rather than staying in delete mode forever.
     """
+    if not IS_SQLITE:
+        # PRAGMA is SQLite syntax. The hook is registered on whichever engine
+        # exists, so it has to decline rather than assume.
+        return
     cursor = dbapi_connection.cursor()
     try:
         cursor.execute("PRAGMA journal_mode=WAL")
@@ -144,6 +170,43 @@ def get_db():
         db.close()
 
 
+class AdminUser(Base):
+    """The operator account, in the database rather than the environment.
+
+    It lived in env vars because the free host had no persistent disk, which made
+    a self-service password change impossible: the change would apply, then revert
+    to the env value on the next restart, silently, while the operator believed it
+    had taken effect.
+
+    `session_epoch` is what makes a password change actually mean something. It is
+    embedded in every issued session token and incremented whenever the password or
+    username changes, so existing sessions stop validating. Without it a stolen
+    cookie would survive a password reset — the reset would feel effective and
+    change nothing for whoever already had access.
+    """
+    __tablename__ = "admin_users"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(Text, unique=True, nullable=False)
+    password_hash = Column(Text, nullable=False)
+    session_epoch = Column(Integer, default=1, nullable=False)
+    # Reset tokens are stored HASHED. Read access to this table must not be enough
+    # to complete a password reset.
+    reset_token_hash = Column(Text, nullable=True)
+    reset_expires_at = Column(Text, nullable=True)
+    created_at = Column(Text)
+    updated_at = Column(Text)
+
+
+def _column_exists(conn, table: str, column: str) -> bool:
+    """Engine-agnostic column check, via SQLAlchemy's own inspector."""
+    from sqlalchemy import inspect as sa_inspect
+
+    try:
+        return column in {c["name"] for c in sa_inspect(conn).get_columns(table)}
+    except Exception:
+        return False
+
+
 def migrate_db():
     """Add new columns to existing tables without dropping data."""
     new_cols = [
@@ -169,11 +232,18 @@ def migrate_db():
     ]
     with engine.connect() as conn:
         for table, col, col_type in new_cols:
+            if _column_exists(conn, table, col):
+                continue
             try:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))
                 conn.commit()
-            except Exception:
-                pass  # column already exists
+            except Exception as exc:
+                # Checked first rather than assuming every failure means "already
+                # exists". SQLite and Postgres word that error differently, so a
+                # blanket except would swallow a genuine migration failure on one
+                # engine and nobody would know until the column was queried.
+                conn.rollback()
+                print(f"[migrate] could not add {table}.{col}: {type(exc).__name__}: {exc}")
         for name, table, col in indexes:
             try:
                 conn.execute(text(f"CREATE INDEX IF NOT EXISTS {name} ON {table}({col})"))

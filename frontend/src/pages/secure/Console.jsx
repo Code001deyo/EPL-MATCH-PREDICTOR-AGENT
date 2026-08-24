@@ -3,6 +3,7 @@ import axios from "axios";
 import Card from "../../components/ui/Card";
 import SectionTitle from "../../components/ui/SectionTitle";
 import RetrainPanel from "../../components/model/RetrainPanel";
+import SecurityCard from "../../components/secure/SecurityCard";
 import DataProvenance from "../../components/DataProvenance";
 import useAuth from "../../hooks/useAuth";
 import { invalidateBacktest } from "../../hooks/useBacktest";
@@ -44,6 +45,10 @@ export default function Console() {
 
       <div style={{ marginBottom: space.lg }}>
         <DataActions />
+      </div>
+
+      <div style={{ marginBottom: space.lg }}>
+        <SecurityCard />
       </div>
 
       <DataProvenance />

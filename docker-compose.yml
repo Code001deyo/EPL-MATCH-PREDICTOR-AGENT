@@ -24,6 +24,8 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - DATA_DIR=/app/dbdata
+      # Empty means SQLite at DATA_DIR; set it to point at Postgres instead.
+      - DATABASE_URL=${DATABASE_URL:-}
       # Background refresh of the in-progress season. 0 disables the loop.
       - REFRESH_INTERVAL_HOURS=6
       # Admin credentials come from .env, which is gitignored. Absent, the app
@@ -59,10 +61,34 @@ services:
       - eplnet
     restart: unless-stopped
 
+  # Local Postgres, so the production storage path is exercised here rather than
+  # first discovered against Neon. Behind a profile because the default local
+  # setup stays on SQLite:
+  #     docker compose --profile pg up -d
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["pg"]
+    environment:
+      POSTGRES_USER: epl
+      POSTGRES_PASSWORD: epl
+      POSTGRES_DB: epl
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U epl"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - eplnet
+
 networks:
   eplnet:
     driver: bridge
 
 volumes:
+  pg_data:
   db_data:
   models_data:

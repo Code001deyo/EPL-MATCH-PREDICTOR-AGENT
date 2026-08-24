@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Login from "./Login";
 import Console from "./Console";
+import ResetPassword from "./ResetPassword";
 import EmptyState from "../../components/ui/EmptyState";
 import useAuth, { AuthProvider } from "../../hooks/useAuth";
 
@@ -34,8 +35,27 @@ export default function SecureModel() {
 
 function SecureModelInner() {
   const { admin, loading, probe } = useAuth();
+  // Read once on mount. Reading it on every render would keep the reset form up
+  // after the token is spent, because the query string is still in the URL.
+  const [resetToken, setResetToken] = useState(
+    () => new URLSearchParams(window.location.search).get("reset") || null
+  );
 
   useEffect(() => { probe(); }, [probe]);
+
+  if (resetToken) {
+    return (
+      <ResetPassword
+        token={resetToken}
+        onDone={() => {
+          // Strip the spent token from the address bar so a refresh, or the URL
+          // being shared, does not present a dead reset form.
+          window.history.replaceState({}, "", window.location.pathname);
+          setResetToken(null);
+        }}
+      />
+    );
+  }
 
   if (loading) return <EmptyState kind="loading" title="Checking your session…" />;
   return admin ? <Console /> : <Login />;

@@ -106,9 +106,27 @@ Sign-in and the console share one route: signed out you get the form, signed in 
 get the console, and the address bar never changes. A separate `/…/login` would be
 a second discoverable path for no benefit.
 
-Credentials live in **environment variables, not the database**: the free instance
-has no persistent disk, so an accounts table would reset to the baked snapshot on
-every restart and admins created after a deploy would silently disappear.
+### Where credentials live, and the rule that matters
+
+Credentials live in the **database**, with the environment used only to create the
+first account.
+
+**If `admin_users` is empty, one row is created from `ADMIN_USERNAME` and
+`ADMIN_PASSWORD_HASH`. If it is not empty, the environment is ignored.**
+
+That second half is the important one. Without it every deploy would quietly
+overwrite a changed password with whatever the env var still said, and the
+operator would believe their new password was in effect while the old one kept
+working. The consequence is worth stating plainly: **once the account exists,
+editing `ADMIN_PASSWORD_HASH` in Render does nothing.**
+
+*Break-glass, if the password is lost and email is unavailable:* delete the row
+(`DELETE FROM admin_users;` against the Neon database), set `ADMIN_PASSWORD_HASH`
+to a fresh hash from `scripts/make-admin-hash.py`, and restart. The next boot
+bootstraps from the environment again.
+
+This requires durable storage, which is why the database moved to Postgres — see
+below.
 
 Generate them locally, then paste the output into Render → your service →
 Environment:
@@ -124,6 +142,11 @@ python scripts/make-admin-hash.py
 | `SESSION_SECRET` | signs the session cookie |
 | `ADMIN_API_KEY` | lets the scheduled refresh authenticate without a cookie |
 | `ALLOWED_ORIGINS` | comma-separated; defaults to localhost + the Vercel origin |
+| `DATABASE_URL` | Neon Postgres connection string. Unset means SQLite on the local disk, which is wiped on every restart |
+| `RESEND_API_KEY` | sends the password-reset email |
+| `RESET_EMAIL_TO` | fixed recipient for reset links (`hanovatechnologies@gmail.com`) |
+| `RESET_EMAIL_FROM` | verified Resend sender, e.g. `EPL Predictor <noreply@hanovatechnologies.co.ke>` |
+| `RESET_LINK_BASE` | public site URL used to build the reset link |
 | `ENABLE_DOCS` | set to `1` only where you want `/docs` exposed; leave unset in production |
 
 `ADMIN_API_KEY` also goes in GitHub → Settings → Secrets → Actions, and the API
@@ -136,6 +159,42 @@ authentication required". The public site is unaffected.
 **There is no password reset.** One account, reachable from the internet, with no
 lockout beyond a rate limit — a self-service reset would be a bigger hole than it
 closes. Losing the password means editing the env var again.
+
+## Durable storage (Neon Postgres)
+
+Set `DATABASE_URL` to a Neon connection string. That is the whole migration: the
+next boot finds an empty database, loads the baked snapshot into it, and creates
+the operator account from the environment.
+
+It fixes two things at once. Password changes and reset tokens survive a restart,
+which is what makes self-service credentials possible at all. And **predictions
+stop being lost** — before this, every restart restored the snapshot and wiped
+whatever visitors had predicted, so the public History emptied itself on a
+schedule nobody chose.
+
+Neon is free, needs no card, and does not pause on inactivity the way Supabase's
+free tier does. It does suspend compute when idle, so the first query after a
+quiet spell pays a wake-up; the engine is configured with `pool_pre_ping` so that
+surfaces as a reconnect rather than an intermittent 500.
+
+Without `DATABASE_URL` the app runs on SQLite exactly as before, which is what
+local development uses. `docker compose --profile pg up -d` starts a local
+Postgres to exercise the production path.
+
+## Password reset by email (Resend)
+
+`POST /auth/forgot` mails a single-use link, valid 30 minutes, to the **fixed**
+address in `RESET_EMAIL_TO` — never to an address supplied in the request, which
+would hand account access to whoever asked. The token is stored only as a hash, so
+read access to the database is not enough to complete a reset.
+
+The endpoint answers identically whether or not the account exists. Anything else
+turns it into a way to confirm the username.
+
+If Resend is not configured the endpoint still answers the same way, and the
+server logs the failure **and the reset link**, so the operator can recover from
+the logs while the mail configuration is fixed. It never pretends to have sent
+something it did not.
 
 ## Keeping results current
 
