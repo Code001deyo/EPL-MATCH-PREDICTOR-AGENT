@@ -2,34 +2,25 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import StatBar from "../components/ui/StatBar";
 import Badge, { resultVariant } from "../components/ui/Badge";
-import { C, shadow, radius } from "../theme";
+import Card from "../components/ui/Card";
+import { C, radius } from "../theme";
+import Select from "../components/predict/Select";
+import UpcomingSelector from "../components/predict/UpcomingSelector";
 
-const API = "http://localhost:8001";
+import EvidenceNote from "../components/EvidenceNote";
+import { API } from "../config";
+import { useIsCompact } from "../hooks/useBreakpoint";
 
+// Possession is deliberately absent: neither data source publishes it, so the
+// model does not predict it (see STAT_TARGETS in models/ml_model.py). The row
+// was inert only because the renderer skips undefined keys.
 const STAT_PAIRS = [
   ["home_shots", "away_shots", "Total Shots"],
   ["home_shots_ot", "away_shots_ot", "Shots on Target"],
-  ["home_possession", "away_possession", "Possession", "%"],
   ["home_corners", "away_corners", "Corners"],
   ["home_fouls", "away_fouls", "Fouls"],
   ["home_yellow_cards", "away_yellow_cards", "Yellow Cards"],
 ];
-
-function Card({ children, style }) {
-  return <div style={{ background: C.white, borderRadius: radius.lg, boxShadow: shadow.card, padding: 24, ...style }}>{children}</div>;
-}
-
-function Select({ label, value, onChange, children, disabled }) {
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: C.slate500, marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</label>
-      <select value={value} onChange={onChange} disabled={disabled}
-        style={{ width: "100%", padding: "9px 12px", borderRadius: radius.sm, border: `1px solid ${C.slate200}`, fontSize: 14, background: C.white, color: C.slate700 }}>
-        {children}
-      </select>
-    </div>
-  );
-}
 
 function ProbBar({ label, value, color }) {
   return (
@@ -44,20 +35,21 @@ function ProbBar({ label, value, color }) {
 }
 
 export default function Predict() {
+  const compact = useIsCompact();
   const [mode, setMode] = useState("upcoming");
   const [result, setResult] = useState(null);
 
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 24, fontWeight: 700, color: C.slate800 }}>Predict</div>
+        <div style={{ fontSize: 24, fontWeight: 700, color: C.navy }}>Predict</div>
         <div style={{ fontSize: 13, color: C.slate400, marginTop: 2 }}>ML-powered match score & stats prediction</div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: 24, alignItems: "start" }}>
+      <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "380px 1fr", gap: 24, alignItems: "start" }}>
         <Card>
           <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-            {[["upcoming", "🔮 Upcoming"], ["played", "📋 Played"]].map(([k, l]) => (
+            {[["upcoming", "Upcoming"], ["played", "Played"]].map(([k, l]) => (
               <button key={k} onClick={() => { setMode(k); setResult(null); }}
                 style={{ flex: 1, padding: "9px 0", borderRadius: radius.sm, border: `1px solid ${mode === k ? C.blue : C.slate200}`,
                   background: mode === k ? C.blue : C.white, color: mode === k ? C.white : C.slate600,
@@ -74,67 +66,12 @@ export default function Predict() {
         <div>
           {result ? <PredictionResult result={result} /> : (
             <Card style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 300, color: C.slate300 }}>
-              <div style={{ fontSize: 48, marginBottom: 12 }}>🔮</div>
               <div style={{ fontSize: 15, fontWeight: 500 }}>Select a fixture and click Predict</div>
             </Card>
           )}
         </div>
       </div>
     </div>
-  );
-}
-
-function UpcomingSelector({ onResult }) {
-  const [grouped, setGrouped] = useState({});
-  const [selectedMW, setSelectedMW] = useState("");
-  const [selectedFixture, setSelectedFixture] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [fetching, setFetching] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    axios.get(`${API}/fixtures/upcoming`).then(r => {
-      const g = {};
-      (r.data.fixtures || []).forEach(f => { if (!g[f.matchweek]) g[f.matchweek] = []; g[f.matchweek].push(f); });
-      setGrouped(g);
-      const mws = Object.keys(g).map(Number).sort((a, b) => a - b);
-      if (mws.length) { setSelectedMW(mws[0]); setSelectedFixture(g[mws[0]][0]); }
-    }).catch(() => setError("Could not load upcoming fixtures.")).finally(() => setFetching(false));
-  }, []);
-
-  const mws = Object.keys(grouped).map(Number).sort((a, b) => a - b);
-
-  const handlePredict = async () => {
-    if (!selectedFixture) return;
-    setError(""); setLoading(true); onResult(null);
-    try {
-      const { data } = await axios.post(`${API}/predict`, { home_team: selectedFixture.home_team, away_team: selectedFixture.away_team, matchweek: selectedFixture.matchweek, season: "2025-26" });
-      onResult(data);
-    } catch (e) { setError(e.response?.data?.detail || "Prediction failed."); }
-    finally { setLoading(false); }
-  };
-
-  if (fetching) return <p style={{ color: C.slate400, fontSize: 13 }}>Loading fixtures...</p>;
-
-  return (
-    <>
-      <Select label="Matchweek" value={selectedMW} onChange={e => { const mw = Number(e.target.value); setSelectedMW(mw); setSelectedFixture(grouped[mw]?.[0] || null); onResult(null); }}>
-        {mws.map(mw => <option key={mw} value={mw}>Matchweek {mw}</option>)}
-      </Select>
-      <Select label="Fixture" value={selectedFixture?.pl_fixture_id || ""} onChange={e => { setSelectedFixture((grouped[selectedMW] || []).find(f => f.pl_fixture_id === Number(e.target.value)) || null); onResult(null); }}>
-        {(grouped[selectedMW] || []).map(f => <option key={f.pl_fixture_id} value={f.pl_fixture_id}>{f.home_team} vs {f.away_team}</option>)}
-      </Select>
-      {selectedFixture && (
-        <div style={{ padding: "10px 14px", background: C.slate50, borderRadius: radius.sm, marginBottom: 14, fontSize: 12, color: C.slate500 }}>
-          📅 {selectedFixture.kickoff} · <span style={{ color: C.blue, fontWeight: 600 }}>Upcoming</span>
-        </div>
-      )}
-      {error && <p style={{ color: C.rose, fontSize: 13, marginBottom: 8 }}>{error}</p>}
-      <button onClick={handlePredict} disabled={loading || !selectedFixture}
-        style={{ width: "100%", padding: 12, background: loading ? C.slate300 : C.blue, color: C.white, border: "none", borderRadius: radius.sm, fontSize: 14, fontWeight: 700, cursor: loading ? "default" : "pointer" }}>
-        {loading ? "Predicting..." : "Predict Score"}
-      </button>
-    </>
   );
 }
 
@@ -194,12 +131,12 @@ function PlayedSelector({ onResult }) {
       </Select>
       {selectedFixture && (
         <div style={{ padding: "10px 14px", background: C.slate50, borderRadius: radius.sm, marginBottom: 14, fontSize: 12, color: C.slate500 }}>
-          📅 {selectedFixture.date} · Actual: <strong style={{ color: C.slate700 }}>{selectedFixture.score}</strong>
+          {selectedFixture.date} · Actual: <strong style={{ color: C.slate700 }}>{selectedFixture.score}</strong>
         </div>
       )}
       {error && <p style={{ color: C.rose, fontSize: 13, marginBottom: 8 }}>{error}</p>}
       <button onClick={handlePredict} disabled={loading || !selectedFixture}
-        style={{ width: "100%", padding: 12, background: loading ? C.slate300 : C.blue, color: C.white, border: "none", borderRadius: radius.sm, fontSize: 14, fontWeight: 700, cursor: loading ? "default" : "pointer" }}>
+        style={{ width: "100%", padding: 12, background: loading ? C.slate300 : C.blue, color: loading ? C.slate600 : C.navy, border: "none", borderRadius: radius.sm, fontSize: 14, fontWeight: 700, cursor: loading ? "default" : "pointer" }}>
         {loading ? "Predicting..." : "Predict Score"}
       </button>
     </>
@@ -216,7 +153,7 @@ function PredictionResult({ result }) {
       <Card>
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <div style={{ fontSize: 12, color: C.slate400, marginBottom: 4 }}>{result.fixture} · MW{result.matchweek} · {result.season}</div>
-          {result.date && <div style={{ fontSize: 11, color: C.slate300 }}>📅 {result.date}</div>}
+          {result.date && <div style={{ fontSize: 11, color: C.slate300 }}>{result.date}</div>}
         </div>
 
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 32, marginBottom: 16 }}>
@@ -246,6 +183,8 @@ function PredictionResult({ result }) {
           <ProbBar label="Away Win" value={result.probabilities.away_win} color={C.rose} />
         </div>
 
+        <EvidenceNote prediction={result} />
+
         <div style={{ textAlign: "center", fontSize: 12, color: C.slate400 }}>
           Model confidence: <strong style={{ color: C.slate600 }}>{(result.confidence * 100).toFixed(0)}%</strong>
         </div>
@@ -264,7 +203,7 @@ function PredictionResult({ result }) {
 
       {Object.keys(stats).length > 0 && (
         <Card>
-          <div style={{ fontSize: 15, fontWeight: 700, color: C.slate800, marginBottom: 4 }}>📊 Predicted Match Stats</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.slate800, marginBottom: 4 }}>Predicted Match Stats</div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 700, color: C.slate400, marginBottom: 16, textTransform: "uppercase" }}>
             <span style={{ color: C.blue }}>{homeTeam}</span>
             <span>Stat</span>

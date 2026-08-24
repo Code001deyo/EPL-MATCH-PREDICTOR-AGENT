@@ -2,17 +2,13 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from "recharts";
 import KpiCard from "../components/ui/KpiCard";
-import { C, shadow, radius } from "../theme";
+import Card from "../components/ui/Card";
+import SectionTitle from "../components/ui/SectionTitle";
+import { C, radius } from "../theme";
+import { series, axis, grid, tooltipStyle, legendStyle } from "../components/charts/chartTheme";
 
-const API = "http://localhost:8001";
-
-function Card({ children, style }) {
-  return <div style={{ background: C.white, borderRadius: radius.lg, boxShadow: shadow.card, padding: 24, ...style }}>{children}</div>;
-}
-
-function SectionTitle({ children }) {
-  return <div style={{ fontSize: 15, fontWeight: 700, color: C.slate800, marginBottom: 16 }}>{children}</div>;
-}
+import { API } from "../config";
+import { useIsCompact } from "../hooks/useBreakpoint";
 
 function FormBadge({ char }) {
   const map = { W: { bg: "#d1fae5", color: C.emerald }, D: { bg: "#fef3c7", color: "#92400e" }, L: { bg: "#fee2e2", color: C.rose } };
@@ -21,8 +17,11 @@ function FormBadge({ char }) {
 }
 
 export default function Analytics() {
+  const compact = useIsCompact();
   const [league, setLeague] = useState(null);
-  const [season, setSeason] = useState("2025-26");
+  // Defaults to the newest season the backend reports. A hardcoded string
+  // here silently became "last season" the moment a new campaign started.
+  const [season, setSeason] = useState(null);
   const [seasons, setSeasons] = useState([]);
   const [h2hHome, setH2hHome] = useState("");
   const [h2hAway, setH2hAway] = useState("");
@@ -30,11 +29,18 @@ export default function Analytics() {
   const [teams, setTeams] = useState([]);
 
   useEffect(() => {
-    axios.get(`${API}/seasons`).then(r => setSeasons(r.data.seasons)).catch(() => {});
+    axios.get(`${API}/seasons`).then(r => {
+      const list = r.data.seasons || [];
+      setSeasons(list);
+      if (list.length) setSeason(list[list.length - 1].id);
+    }).catch(() => {});
     axios.get(`${API}/teams`).then(r => { setTeams(r.data.teams); setH2hHome(r.data.teams[0] || ""); setH2hAway(r.data.teams[1] || ""); }).catch(() => {});
   }, []);
 
   useEffect(() => {
+    // Season starts null until /seasons answers; firing the request early would
+    // ask the backend for "season=null".
+    if (!season) return;
     axios.get(`${API}/analytics/league?season=${season}`).then(r => setLeague(r.data)).catch(() => {});
   }, [season]);
 
@@ -53,10 +59,10 @@ export default function Analytics() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
         <div>
-          <div style={{ fontSize: 24, fontWeight: 700, color: C.slate800 }}>Analytics</div>
+          <div style={{ fontSize: 24, fontWeight: 700, color: C.navy }}>Analytics</div>
           <div style={{ fontSize: 13, color: C.slate400, marginTop: 2 }}>League statistics & head-to-head analysis</div>
         </div>
-        <select value={season} onChange={e => setSeason(e.target.value)}
+        <select value={season || ""} onChange={e => setSeason(e.target.value)}
           style={{ padding: "8px 12px", borderRadius: radius.sm, border: `1px solid ${C.slate200}`, fontSize: 13, background: C.white }}>
           {seasons.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
@@ -64,39 +70,41 @@ export default function Analytics() {
 
       {/* League KPIs */}
       <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
-        <KpiCard icon="⚽" label="Avg Goals / Game" value={league?.avg_goals_per_game ?? "—"} color={C.blue} />
-        <KpiCard icon="🏠" label="Home Win Rate" value={league ? `${(league.home_win_rate * 100).toFixed(0)}%` : "—"} color={C.emerald} />
-        <KpiCard icon="🤝" label="Draw Rate" value={league ? `${(league.draw_rate * 100).toFixed(0)}%` : "—"} color={C.amber} />
-        <KpiCard icon="✈️" label="Away Win Rate" value={league ? `${(league.away_win_rate * 100).toFixed(0)}%` : "—"} color={C.rose} />
-        <KpiCard icon="🎮" label="Matches Played" value={league?.total_matches ?? "—"} color={C.slate600} />
+        <KpiCard label="Avg Goals / Game" value={league?.avg_goals_per_game ?? "—"} color={C.blue} />
+        <KpiCard label="Home Win Rate" value={league ? `${(league.home_win_rate * 100).toFixed(0)}%` : "—"} color={C.emerald} />
+        <KpiCard label="Draw Rate" value={league ? `${(league.draw_rate * 100).toFixed(0)}%` : "—"} color={C.amber} />
+        <KpiCard label="Away Win Rate" value={league ? `${(league.away_win_rate * 100).toFixed(0)}%` : "—"} color={C.rose} />
+        <KpiCard label="Matches Played" value={league?.total_matches ?? "—"} color={C.slate600} />
       </div>
 
       {/* Charts */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "1fr 1fr", gap: 20, marginBottom: 24 }}>
         <Card>
-          <SectionTitle>📈 Goals per Matchweek</SectionTitle>
+          <SectionTitle>Goals per Matchweek</SectionTitle>
           <ResponsiveContainer width="100%" height={230}>
             <LineChart data={goalsByMW}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="matchweek" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Line type="monotone" dataKey="home_goals" name="Home Goals" stroke={C.blue} strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="away_goals" name="Away Goals" stroke={C.rose} strokeWidth={2} dot={false} />
+              <CartesianGrid {...grid} />
+              <XAxis dataKey="matchweek" {...axis} />
+              <YAxis {...axis} />
+              <Tooltip {...tooltipStyle} labelFormatter={(l) => `Matchweek ${l}`} />
+              <Legend wrapperStyle={legendStyle} />
+              {/* Was green vs red — red reads as "bad away goals" rather than
+                  "away goals". Brand pair, no meaning implied. */}
+              <Line type="monotone" dataKey="home_goals" name="Home Goals" stroke={series.primary} strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="away_goals" name="Away Goals" stroke={series.accent} strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </Card>
 
         <Card>
-          <SectionTitle>🏆 Top Attacking Teams</SectionTitle>
+          <SectionTitle>Top Attacking Teams</SectionTitle>
           <ResponsiveContainer width="100%" height={230}>
             <BarChart data={topScoring} layout="vertical" margin={{ left: 10, right: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-              <XAxis type="number" tick={{ fontSize: 11 }} />
-              <YAxis type="category" dataKey="team" tick={{ fontSize: 11 }} width={85} />
-              <Tooltip />
-              <Bar dataKey="goals" fill={C.emerald} radius={[0, 4, 4, 0]} />
+              <CartesianGrid {...grid} vertical horizontal={false} />
+              <XAxis type="number" {...axis} />
+              <YAxis type="category" dataKey="team" {...axis} width={85} />
+              <Tooltip {...tooltipStyle} />
+              <Bar dataKey="goals" fill={series.primary} radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </Card>
@@ -104,7 +112,7 @@ export default function Analytics() {
 
       {/* H2H Explorer */}
       <Card style={{ marginBottom: 24 }}>
-        <SectionTitle>⚔️ Head-to-Head Explorer</SectionTitle>
+        <SectionTitle>Head-to-Head Explorer</SectionTitle>
         <div style={{ display: "flex", gap: 12, marginBottom: 20, alignItems: "flex-end" }}>
           {[["Home Team", h2hHome, setH2hHome], ["Away Team", h2hAway, setH2hAway]].map(([label, val, setter]) => (
             <div key={label} style={{ flex: 1 }}>
@@ -162,7 +170,7 @@ export default function Analytics() {
 
       {/* Form Table */}
       <Card>
-        <SectionTitle>📋 League Table — {season}</SectionTitle>
+        <SectionTitle>League Table — {season}</SectionTitle>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>

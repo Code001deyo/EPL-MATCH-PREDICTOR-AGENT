@@ -2,14 +2,11 @@ import { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import KpiCard from "../components/ui/KpiCard";
+import Card from "../components/ui/Card";
 import Badge, { resultVariant } from "../components/ui/Badge";
-import { C, shadow, radius } from "../theme";
+import { C, radius } from "../theme";
 
-const API = "http://localhost:8001";
-
-function Card({ children, style }) {
-  return <div style={{ background: C.white, borderRadius: radius.lg, boxShadow: shadow.card, padding: 24, ...style }}>{children}</div>;
-}
+import { API } from "../config";
 
 export default function History() {
   const [history, setHistory] = useState([]);
@@ -47,21 +44,21 @@ export default function History() {
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 24, fontWeight: 700, color: C.slate800 }}>Prediction History</div>
+        <div style={{ fontSize: 24, fontWeight: 700, color: C.navy }}>Prediction History</div>
         <div style={{ fontSize: 13, color: C.slate400, marginTop: 2 }}>Track record of all predictions vs actual results</div>
       </div>
 
       <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
-        <KpiCard icon="🔮" label="Total Predictions" value={history.length} color={C.blue} />
-        <KpiCard icon="🎯" label="Result Accuracy" value={evaluated.length ? `${Math.round((correct / evaluated.length) * 100)}%` : "—"} sub={`${correct} / ${evaluated.length} evaluated`} color={C.emerald} />
-        <KpiCard icon="✅" label="Exact Score %" value={evaluated.length ? `${Math.round((exact / evaluated.length) * 100)}%` : "—"} sub={`${exact} exact scores`} color={C.amber} />
-        <KpiCard icon="⏳" label="Pending" value={history.length - evaluated.length} color={C.slate400} />
+        <KpiCard label="Total Predictions" value={history.length} color={C.blue} />
+        <KpiCard label="Result Accuracy" value={evaluated.length ? `${Math.round((correct / evaluated.length) * 100)}%` : "—"} sub={`${correct} / ${evaluated.length} evaluated`} color={C.emerald} />
+        <KpiCard label="Exact Score %" value={evaluated.length ? `${Math.round((exact / evaluated.length) * 100)}%` : "—"} sub={`${exact} exact scores`} color={C.amber} />
+        <KpiCard label="Pending" value={history.length - evaluated.length} color={C.slate400} />
       </div>
 
       {/* Accuracy Trend */}
       {trendData.length > 0 && (
         <Card style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: C.slate800, marginBottom: 16 }}>📈 Rolling Accuracy (10-Prediction Window)</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.slate800, marginBottom: 16 }}>Rolling Accuracy (10-Prediction Window)</div>
           <ResponsiveContainer width="100%" height={180}>
             <LineChart data={trendData}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -85,10 +82,10 @@ export default function History() {
           <select value={filterResult} onChange={e => setFilterResult(e.target.value)}
             style={{ padding: "7px 12px", borderRadius: radius.sm, border: `1px solid ${C.slate200}`, fontSize: 13, background: C.white }}>
             <option value="all">All Results</option>
-            <option value="exact">✅ Exact Score</option>
-            <option value="result">🟡 Correct Result</option>
-            <option value="wrong">❌ Wrong</option>
-            <option value="pending">⏳ Pending</option>
+            <option value="exact">Exact Score</option>
+            <option value="result">Correct Result</option>
+            <option value="wrong">Wrong</option>
+            <option value="pending">Pending</option>
           </select>
           <span style={{ fontSize: 12, color: C.slate400 }}>{filtered.length} predictions</span>
         </div>

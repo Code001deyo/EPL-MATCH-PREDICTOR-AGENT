@@ -1,10 +1,10 @@
 import { C } from "../../theme";
 
 const VARIANTS = {
-  exact:   { bg: "#d1fae5", color: C.emerald, label: "✅ Exact Score" },
-  result:  { bg: "#fef3c7", color: "#92400e", label: "🟡 Correct Result" },
-  wrong:   { bg: "#fee2e2", color: C.rose,    label: "❌ Wrong" },
-  pending: { bg: C.slate100, color: C.slate500, label: "⏳ Pending" },
+  exact:   { bg: "#d1fae5", color: C.emerald, label: "Exact Score" },
+  result:  { bg: "#fef3c7", color: "#92400e", label: "Correct Result" },
+  wrong:   { bg: "#fee2e2", color: C.rose,    label: "Wrong" },
+  pending: { bg: C.slate100, color: C.slate500, label: "Pending" },
 };
 
 export function resultVariant(predicted, actual) {

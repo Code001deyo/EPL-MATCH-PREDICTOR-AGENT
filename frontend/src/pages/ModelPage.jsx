@@ -1,83 +1,104 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from "recharts";
 import KpiCard from "../components/ui/KpiCard";
-import { C, shadow, radius } from "../theme";
-
-const API = "http://localhost:8001";
-
-function Card({ children, style }) {
-  return <div style={{ background: C.white, borderRadius: radius.lg, boxShadow: shadow.card, padding: 24, ...style }}>{children}</div>;
-}
-
-function SectionTitle({ children }) {
-  return <div style={{ fontSize: 15, fontWeight: 700, color: C.slate800, marginBottom: 16 }}>{children}</div>;
-}
+import Card from "../components/ui/Card";
+import SectionTitle from "../components/ui/SectionTitle";
+import EmptyState from "../components/ui/EmptyState";
+import RetrainPanel from "../components/model/RetrainPanel";
+import ModelArchitecture from "../components/model/ModelArchitecture";
+import { C, type, space } from "../theme";
+import { series, axis, grid, tooltipStyle, legendStyle } from "../components/charts/chartTheme";
+import { useIsCompact } from "../hooks/useBreakpoint";
+import { API } from "../config";
 
 export default function ModelPage() {
   const [perf, setPerf] = useState(null);
-  const [retraining, setRetraining] = useState(false);
-  const [retrainResult, setRetrainResult] = useState(null);
-  const [lastTrained, setLastTrained] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const compact = useIsCompact();
 
-  const fetchPerf = () => {
-    axios.get(`${API}/analytics/model/performance`).then(r => setPerf(r.data)).catch(() => {});
-  };
+  const fetchPerf = useCallback(() => {
+    setLoading(true);
+    axios.get(`${API}/analytics/model/performance`)
+      .then(r => setPerf(r.data))
+      .catch(() => setPerf(null))
+      .finally(() => setLoading(false));
+  }, []);
 
-  useEffect(() => { fetchPerf(); }, []);
+  useEffect(() => { fetchPerf(); }, [fetchPerf]);
 
-  const handleRetrain = async () => {
-    setRetraining(true); setRetrainResult(null);
-    try {
-      const { data } = await axios.post(`${API}/model/retrain`);
-      setRetrainResult(data);
-      setLastTrained(new Date().toLocaleString());
-      fetchPerf();
-    } catch (e) {
-      setRetrainResult({ error: e.response?.data?.detail || "Retrain failed." });
-    } finally { setRetraining(false); }
-  };
+  // These counts live under `live_settled`. This page used to read them from the
+  // top level, where only `evaluated` and `total_predictions` exist — so exact,
+  // correct and wrong were all undefined and defaulted to 0, and the donut
+  // rendered three empty slices beside a non-zero "Evaluated" count.
+  const live = perf?.live_settled || {};
+  const backtested = perf?.backtested || null;
 
-  const evaluated = perf?.evaluated || 0;
-  const exact = perf?.exact_score_count || 0;
-  const correctResult = perf?.correct_result_count || 0;
-  const wrong = perf?.wrong_count || 0;
-  const pending = (perf?.total_predictions || 0) - evaluated;
+  const evaluated = live.evaluated || 0;
+  const exact = live.exact_score_count || 0;
+  const correctResult = live.correct_result_count || 0;
+  const wrong = live.wrong_count || 0;
 
   const donutData = evaluated > 0 ? [
     { name: "Exact Score", value: exact, color: C.emerald },
-    { name: "Correct Result", value: correctResult - exact, color: C.amber },
+    { name: "Correct Result", value: correctResult - exact, color: C.navyLight },
     { name: "Wrong", value: wrong, color: C.rose },
   ] : [];
 
-  const monthlyData = (perf?.by_month || []).map(m => ({
+  const monthlyData = (live.by_month || []).map(m => ({
     month: m.month,
     "Result %": Math.round(m.correct_result_pct * 100),
     "Exact %": Math.round(m.exact_score_pct * 100),
   }));
 
-  const metrics = retrainResult?.metrics || {};
-
   return (
     <div>
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 24, fontWeight: 700, color: C.slate800 }}>Model Performance</div>
-        <div style={{ fontSize: 13, color: C.slate400, marginTop: 2 }}>XGBoost model metrics and retraining controls</div>
+      <div style={{ marginBottom: space.xl }}>
+        <div style={{ ...type.page, color: C.navy }}>Model Performance</div>
+        <div style={{ fontSize: 13, color: C.slate400, marginTop: 2 }}>
+          Backtested accuracy and live-settled accuracy, reported separately
+        </div>
       </div>
 
-      <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
-        <KpiCard icon="🔮" label="Total Predictions" value={perf?.total_predictions ?? "—"} color={C.blue} />
-        <KpiCard icon="📊" label="Evaluated" value={evaluated} sub="with actual results" color={C.slate600} />
-        <KpiCard icon="🎯" label="Result Accuracy" value={evaluated ? `${(perf.correct_result_accuracy * 100).toFixed(0)}%` : "—"} color={C.emerald} />
-        <KpiCard icon="✅" label="Exact Score %" value={evaluated ? `${(perf.exact_score_accuracy * 100).toFixed(0)}%` : "—"} color={C.amber} />
-        <KpiCard icon="💡" label="Avg Confidence" value={perf?.avg_confidence ? `${(perf.avg_confidence * 100).toFixed(0)}%` : "—"} color={C.blue} />
+      {/* Backtested and live-settled measure different things: a systematic
+          walk-forward simulation versus whatever fixtures users happened to
+          click. Averaging them into one headline would hide which is which. */}
+      <Card style={{ marginBottom: space.xl }}>
+        <SectionTitle level="primary" sub="Walk-forward simulation over completed seasons: refit before each matchweek, then score it.">
+          Backtested accuracy
+        </SectionTitle>
+        {!backtested || !backtested.matches_scored ? (
+          <EmptyState kind="not-measured" title="No backtest has been run"
+            detail="Run one from the dashboard calibration panel to populate this." />
+        ) : (
+          <div style={{ display: "flex", gap: space.xxl, flexWrap: "wrap" }}>
+            <Figure label="Correct result" value={`${backtested.headline.correct_result_pct}%`}
+              sub={`vs ${backtested.headline.always_home_pct}% always-home`} />
+            <Figure label="Exact score" value={`${backtested.headline.exact_score_pct}%`} />
+            <Figure label="Log loss" value={backtested.headline.log_loss}
+              sub={`vs ${backtested.headline.base_rate_log_loss} base rate`} />
+            <Figure label="Matches" value={backtested.headline.matches}
+              sub={(backtested.seasons_covered || []).join(", ")} />
+          </div>
+        )}
+      </Card>
+
+      <SectionTitle sub="Predictions users actually made, settled against real results. Self-selected, so not a measurement of the model.">
+        Live-settled predictions
+      </SectionTitle>
+
+      <div style={{ display: "flex", gap: space.lg, marginBottom: space.xl, flexWrap: "wrap" }}>
+        <KpiCard label="Total Predictions" value={live.total_predictions ?? "—"} color={C.blue} />
+        <KpiCard label="Evaluated" value={evaluated || "—"} sub="with actual results" color={C.slate600} />
+        <KpiCard label="Result Accuracy" value={evaluated ? `${(live.correct_result_accuracy * 100).toFixed(0)}%` : "not measured"} color={C.emerald} />
+        <KpiCard label="Exact Score %" value={evaluated ? `${(live.exact_score_accuracy * 100).toFixed(0)}%` : "not measured"} color={C.amber} />
+        <KpiCard label="Avg Confidence" value={live.avg_confidence ? `${(live.avg_confidence * 100).toFixed(0)}%` : "not measured"} color={C.blue} />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24 }}>
-        {/* Donut Chart */}
+      <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "1fr 1fr", gap: space.xl, marginBottom: space.xl }}>
         <Card>
-          <SectionTitle>🎯 Prediction Accuracy Breakdown</SectionTitle>
-          {donutData.length > 0 ? (
+          <SectionTitle>Prediction Accuracy Breakdown</SectionTitle>
+          {loading ? <EmptyState kind="loading" /> : donutData.length > 0 ? (
             <>
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
@@ -87,7 +108,7 @@ export default function ModelPage() {
                   <Tooltip formatter={(v, n) => [v, n]} />
                 </PieChart>
               </ResponsiveContainer>
-              <div style={{ display: "flex", justifyContent: "center", gap: 20, marginTop: 8 }}>
+              <div style={{ display: "flex", justifyContent: "center", gap: 20, marginTop: 8, flexWrap: "wrap" }}>
                 {donutData.map(d => (
                   <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
                     <div style={{ width: 10, height: 10, borderRadius: 2, background: d.color }} />
@@ -97,94 +118,48 @@ export default function ModelPage() {
               </div>
             </>
           ) : (
-            <div style={{ textAlign: "center", color: C.slate300, padding: "40px 0" }}>
-              <div style={{ fontSize: 36 }}>📊</div>
-              <div style={{ fontSize: 13, marginTop: 8 }}>No evaluated predictions yet</div>
-            </div>
+            <EmptyState kind="not-measured" title="No settled predictions yet"
+              detail="A prediction is settled once its fixture has been played." />
           )}
         </Card>
 
-        {/* Monthly Accuracy */}
         <Card>
-          <SectionTitle>📅 Monthly Accuracy Trend</SectionTitle>
-          {monthlyData.length > 0 ? (
+          <SectionTitle>Monthly Accuracy Trend</SectionTitle>
+          {loading ? <EmptyState kind="loading" /> : monthlyData.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" tick={{ fontSize: 10 }} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
-                <Tooltip unit="%" />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="Result %" fill={C.blue} radius={[3, 3, 0, 0]} />
-                <Bar dataKey="Exact %" fill={C.emerald} radius={[3, 3, 0, 0]} />
+                <CartesianGrid {...grid} />
+                <XAxis dataKey="month" {...axis} />
+                <YAxis domain={[0, 100]} {...axis} unit="%" />
+                <Tooltip {...tooltipStyle} />
+                <Legend wrapperStyle={legendStyle} />
+                {/* Two greys made these read as one series in two shades. Result
+                    and exact-score are different measurements. */}
+                <Bar dataKey="Result %" fill={series.primary} radius={[3, 3, 0, 0]} />
+                <Bar dataKey="Exact %" fill={series.accent} radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <div style={{ textAlign: "center", color: C.slate300, padding: "40px 0" }}>
-              <div style={{ fontSize: 36 }}>📅</div>
-              <div style={{ fontSize: 13, marginTop: 8 }}>No monthly data yet</div>
-            </div>
+            <EmptyState kind="not-measured" title="No monthly data yet" />
           )}
         </Card>
       </div>
 
-      {/* Retrain Card */}
-      <Card>
-        <SectionTitle>🔄 Model Retraining</SectionTitle>
-        <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
-          <div style={{ flex: 1 }}>
-            <p style={{ fontSize: 13, color: C.slate500, marginBottom: 16, lineHeight: 1.6 }}>
-              Retrain the XGBoost models on all available match data. This updates the home goals and away goals prediction models with the latest results.
-              Training uses 80/20 walk-forward validation split.
-            </p>
-            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-              <button onClick={handleRetrain} disabled={retraining}
-                style={{ padding: "11px 28px", background: retraining ? C.slate300 : C.blue, color: C.white, border: "none", borderRadius: radius.sm, fontSize: 14, fontWeight: 700, cursor: retraining ? "default" : "pointer" }}>
-                {retraining ? "⏳ Training..." : "🔄 Retrain Model"}
-              </button>
-              {lastTrained && <span style={{ fontSize: 12, color: C.slate400 }}>Last trained: {lastTrained}</span>}
-            </div>
-          </div>
+      <div style={{ marginBottom: space.xl }}>
+        <RetrainPanel onComplete={fetchPerf} />
+      </div>
 
-          {retrainResult && (
-            <div style={{ flex: 1, padding: "16px 20px", background: retrainResult.error ? "#fff5f5" : "#f0fdf4", borderRadius: radius.md, border: `1px solid ${retrainResult.error ? C.rose : C.emerald}` }}>
-              {retrainResult.error ? (
-                <p style={{ color: C.rose, fontSize: 13 }}>❌ {retrainResult.error}</p>
-              ) : (
-                <>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: C.emerald, marginBottom: 10 }}>✅ {retrainResult.status}</div>
-                  {Object.entries(retrainResult.metrics || {}).map(([k, v]) => (
-                    <div key={k} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: C.slate600, marginBottom: 4 }}>
-                      <span>{k.replace(/_/g, " ")}</span>
-                      <strong>{typeof v === "number" ? v.toFixed(4) : v}</strong>
-                    </div>
-                  ))}
-                </>
-              )}
-            </div>
-          )}
-        </div>
+      <ModelArchitecture />
+    </div>
+  );
+}
 
-        {/* Model Info */}
-        <div style={{ marginTop: 24, padding: "16px 20px", background: C.slate50, borderRadius: radius.md }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.slate600, marginBottom: 10 }}>Model Architecture</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, fontSize: 12, color: C.slate500 }}>
-            {[
-              ["Algorithm", "XGBoost Regressor"],
-              ["Models", "Home Goals + Away Goals"],
-              ["Features", "35 engineered features"],
-              ["Validation", "80/20 walk-forward split"],
-              ["Probability", "Poisson distribution"],
-              ["Explainability", "Feature importance"],
-            ].map(([k, v]) => (
-              <div key={k}>
-                <div style={{ fontWeight: 600, color: C.slate600, marginBottom: 2 }}>{k}</div>
-                <div style={{ color: C.slate400 }}>{v}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Card>
+function Figure({ label, value, sub }) {
+  return (
+    <div>
+      <div style={{ ...type.label, color: C.slate500 }}>{label}</div>
+      <div style={{ ...type.stat, color: C.slate800, marginTop: 4 }}>{value}</div>
+      {sub && <div style={{ ...type.micro, fontWeight: 400, color: C.slate400, marginTop: 4 }}>{sub}</div>}
     </div>
   );
 }

@@ -1,43 +1,84 @@
-import { NavLink } from "react-router-dom";
-import { C, SIDEBAR_W } from "../theme";
+import { useState, useEffect } from "react";
+import { NavLink, useLocation } from "react-router-dom";
+import { C, SIDEBAR_W, space, type } from "../theme";
+import { useIsNarrow } from "../hooks/useBreakpoint";
 
 const NAV = [
-  { to: "/",          icon: "📊", label: "Dashboard"  },
-  { to: "/predict",   icon: "🔮", label: "Predict"    },
-  { to: "/analytics", icon: "📈", label: "Analytics"  },
-  { to: "/teams",     icon: "👥", label: "Teams"      },
-  { to: "/history",   icon: "📋", label: "History"    },
-  { to: "/model",     icon: "⚙️",  label: "Model"      },
+  { to: "/",          label: "Dashboard"  },
+  { to: "/predict",   label: "Predict"    },
+  { to: "/analytics", label: "Analytics"  },
+  { to: "/teams",     label: "Teams"      },
+  { to: "/history",   label: "History"    },
+  { to: "/model",     label: "Model"      },
 ];
 
+/* Fixed 220px rail on desktop; an off-canvas drawer below the md breakpoint.
+ * It was previously `position: fixed` at 220px with no collapse, and <main>
+ * carried an unconditional 220px left margin, so on a phone or a split window
+ * the nav covered a third of the content and nothing reflowed. */
 export default function Sidebar() {
+  const narrow = useIsNarrow();
+  const [open, setOpen] = useState(false);
+  const location = useLocation();
+
+  // Close the drawer on navigation, or it stays over the page just navigated to.
+  useEffect(() => { setOpen(false); }, [location.pathname]);
+
+  const visible = !narrow || open;
+
   return (
-    <aside style={{
-      width: SIDEBAR_W, minHeight: "100vh", background: C.navy,
-      display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, zIndex: 100,
-    }}>
-      <div style={{ padding: "24px 20px 20px", borderBottom: `1px solid ${C.navyLight}` }}>
-        <div style={{ fontSize: 20, fontWeight: 700, color: C.white }}>⚽ EPL Predictor</div>
-        <div style={{ fontSize: 11, color: C.slate400, marginTop: 3 }}>ML-Powered Analytics</div>
-      </div>
-      <nav style={{ padding: "12px 10px", flex: 1 }}>
-        {NAV.map(({ to, icon, label }) => (
-          <NavLink key={to} to={to} end={to === "/"} style={({ isActive }) => ({
-            display: "flex", alignItems: "center", gap: 10,
-            padding: "10px 12px", borderRadius: 8, marginBottom: 2,
-            textDecoration: "none", fontSize: 14, fontWeight: 500,
-            color: isActive ? C.white : C.slate400,
-            background: isActive ? C.navyLight : "transparent",
-            transition: "all 0.15s",
-          })}>
-            <span style={{ fontSize: 16 }}>{icon}</span>
-            {label}
-          </NavLink>
-        ))}
-      </nav>
-      <div style={{ padding: "16px 20px", borderTop: `1px solid ${C.navyLight}`, fontSize: 11, color: C.slate500 }}>
-        Data: Premier League API
-      </div>
-    </aside>
+    <>
+      {narrow && (
+        <button
+          onClick={() => setOpen(o => !o)}
+          aria-label={open ? "Close navigation" : "Open navigation"}
+          aria-expanded={open}
+          style={{
+            position: "fixed", top: space.md, left: space.md, zIndex: 120,
+            width: 40, height: 40, borderRadius: 8, border: "none",
+            background: C.navy, color: C.white, fontSize: 18, cursor: "pointer",
+          }}
+        >
+          {open ? "×" : "≡"}
+        </button>
+      )}
+
+      {narrow && open && (
+        <div
+          onClick={() => setOpen(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", zIndex: 110 }}
+        />
+      )}
+
+      <aside style={{
+        width: SIDEBAR_W, minHeight: "100vh", background: C.navy,
+        display: "flex", flexDirection: "column",
+        position: "fixed", top: 0, left: 0, zIndex: 115,
+        transform: visible ? "translateX(0)" : `translateX(-${SIDEBAR_W}px)`,
+        transition: "transform .2s ease",
+      }}>
+        <div style={{ padding: "24px 20px 20px", borderBottom: `1px solid ${C.navyLight}` }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: C.white, letterSpacing: "-0.3px" }}>EPL Predictor</div>
+          <div style={{ ...type.micro, fontWeight: 400, color: C.slate400, marginTop: 3 }}>ML-Powered Analytics</div>
+        </div>
+        <nav style={{ padding: "12px 10px", flex: 1 }}>
+          {NAV.map(({ to, label }) => (
+            <NavLink key={to} to={to} end={to === "/"} style={({ isActive }) => ({
+              display: "flex", alignItems: "center",
+              padding: "10px 14px", borderRadius: 8, marginBottom: 2,
+              textDecoration: "none", fontSize: 14, fontWeight: 500,
+              color: isActive ? C.navy : C.slate300,
+              background: isActive ? C.blue : "transparent",
+              transition: "all 0.15s",
+            })}>
+              {label}
+            </NavLink>
+          ))}
+        </nav>
+        <div style={{ padding: "16px 20px", borderTop: `1px solid ${C.navyLight}`, ...type.micro, fontWeight: 400, color: C.slate500 }}>
+          Data: Premier League API
+        </div>
+      </aside>
+    </>
   );
 }

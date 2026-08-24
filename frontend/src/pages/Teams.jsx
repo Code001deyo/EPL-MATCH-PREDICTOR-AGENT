@@ -2,19 +2,15 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from "recharts";
 import KpiCard from "../components/ui/KpiCard";
+import Card from "../components/ui/Card";
+import SectionTitle from "../components/ui/SectionTitle";
 import { C, shadow, radius } from "../theme";
 
-const API = "http://localhost:8001";
-
-function Card({ children, style }) {
-  return <div style={{ background: C.white, borderRadius: radius.lg, boxShadow: shadow.card, padding: 24, ...style }}>{children}</div>;
-}
-
-function SectionTitle({ children }) {
-  return <div style={{ fontSize: 15, fontWeight: 700, color: C.slate800, marginBottom: 16 }}>{children}</div>;
-}
+import { API } from "../config";
+import { useIsCompact } from "../hooks/useBreakpoint";
 
 export default function Teams() {
+  const compact = useIsCompact();
   const [teams, setTeams] = useState([]);
   const [selected, setSelected] = useState("");
   const [stats, setStats] = useState(null);
@@ -50,7 +46,7 @@ export default function Teams() {
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 24, fontWeight: 700, color: C.slate800 }}>Teams</div>
+        <div style={{ fontSize: 24, fontWeight: 700, color: C.navy }}>Teams</div>
         <div style={{ fontSize: 13, color: C.slate400, marginTop: 2 }}>Deep-dive team performance analysis</div>
       </div>
 
@@ -64,12 +60,12 @@ export default function Teams() {
         </div>
         {form && (
           <div style={{ display: "flex", gap: 12, flex: 1, flexWrap: "wrap" }}>
-            <KpiCard icon="📊" label="Last 15 Played" value={played} color={C.slate600} />
-            <KpiCard icon="✅" label="Wins" value={wins} color={C.emerald} />
-            <KpiCard icon="🤝" label="Draws" value={draws} color={C.amber} />
-            <KpiCard icon="❌" label="Losses" value={losses} color={C.rose} />
-            <KpiCard icon="⚽" label="Avg Scored" value={form.avg_gf_last5} sub="last 5" color={C.blue} />
-            <KpiCard icon="🛡️" label="Avg Conceded" value={form.avg_ga_last5} sub="last 5" color={C.rose} />
+            <KpiCard label="Last 15 Played" value={played} color={C.slate600} />
+            <KpiCard label="Wins" value={wins} color={C.emerald} />
+            <KpiCard label="Draws" value={draws} color={C.amber} />
+            <KpiCard label="Losses" value={losses} color={C.rose} />
+            <KpiCard label="Avg Scored" value={form.avg_gf_last5} sub="last 5" color={C.blue} />
+            <KpiCard label="Avg Conceded" value={form.avg_ga_last5} sub="last 5" color={C.rose} />
           </div>
         )}
       </div>
@@ -92,9 +88,9 @@ export default function Teams() {
       )}
 
       {chartData.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24 }}>
+        <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "1fr 1fr", gap: 20, marginBottom: 24 }}>
           <Card>
-            <SectionTitle>⚽ Goals Scored vs Conceded (Last 15)</SectionTitle>
+            <SectionTitle>Goals Scored vs Conceded (Last 15)</SectionTitle>
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -109,7 +105,7 @@ export default function Teams() {
           </Card>
 
           <Card>
-            <SectionTitle>📊 Form Points (Last 15 Matches)</SectionTitle>
+            <SectionTitle>Form Points (Last 15 Matches)</SectionTitle>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={formData}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -128,7 +124,7 @@ export default function Teams() {
       {/* Recent Results Table */}
       {form?.last_matches?.length > 0 && (
         <Card>
-          <SectionTitle>📋 Recent Results</SectionTitle>
+          <SectionTitle>Recent Results</SectionTitle>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: `2px solid ${C.slate100}` }}>
