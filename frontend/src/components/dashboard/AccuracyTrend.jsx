@@ -6,6 +6,7 @@ import {
 import Card from "../ui/Card";
 import SectionTitle from "../ui/SectionTitle";
 import EmptyState from "../ui/EmptyState";
+import InfoTip from "../ui/InfoTip";
 import { C, type, space } from "../../theme";
 import { series, baselineLine, axis, grid, tooltipStyle, legendStyle, pct, rollingMean, deltaColor } from "../charts/chartTheme";
 import useBacktest from "../../hooks/useBacktest";
@@ -37,12 +38,18 @@ export default function AccuracyTrend() {
 
   return (
     <Card>
-      <SectionTitle
-        level="primary"
-        sub={`Correct-result rate per matchweek across the backtested seasons, smoothed over a trailing ${WINDOW}-week window — a single matchweek is only 10 matches and swings wildly on sample size alone. The dashed line is the always-home baseline over the same fixtures.`}
-      >
-        Accuracy over time
-      </SectionTitle>
+      {/* The explanation moved into the ⓘ. It is the same text; it simply is not
+          two lines of paragraph above a chart on a dashboard any more. */}
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
+        <span style={{ ...type.section, color: C.slate800 }}>Accuracy over time</span>
+        <InfoTip label="About the accuracy trend">
+          Correct-result rate per matchweek across the backtested seasons, smoothed over a
+          trailing {WINDOW}-week window — a single matchweek is only 10 matches and swings
+          wildly on sample size alone. Trailing rather than centred, so no point is computed
+          from weeks that had not happened yet. The dashed line is the always-home baseline
+          over the same fixtures; hover any point for that week's raw figure.
+        </InfoTip>
+      </div>
 
       {state === "loading" && <EmptyState kind="loading" />}
       {state === "error" && <EmptyState kind="error" title="Could not load the backtest" />}
@@ -56,8 +63,7 @@ export default function AccuracyTrend() {
 
       {state === "ready" && (
         <>
-          {headline && <Headline headline={headline} />}
-          <ResponsiveContainer width="100%" height={280}>
+          <ResponsiveContainer width="100%" height={230}>
             <ComposedChart data={data} margin={{ top: 8, right: 16, bottom: 4, left: -12 }}>
               <CartesianGrid {...grid} />
               <XAxis dataKey="label" {...axis} interval="preserveStartEnd" minTickGap={28} />
@@ -68,8 +74,8 @@ export default function AccuracyTrend() {
               {/* Season boundaries: accuracy is not comparable straight across
                   them — each new season refits on a squad the model has not seen. */}
               {seasons.map((s) => (
-                <ReferenceLine key={s.label} x={s.label} stroke={C.slate200}
-                  strokeDasharray="2 4" label={{ value: s.season, position: "insideTopLeft", fontSize: 10, fill: C.slate400 }} />
+                <ReferenceLine key={s.label} x={s.label} stroke={C.blueDark} strokeOpacity={0.45}
+                  strokeDasharray="2 4" label={{ value: s.season, position: "insideTopLeft", fontSize: 10, fill: C.blueDark }} />
               ))}
 
               <Line type="monotone" dataKey="correct_result_pct_avg" name="Model"

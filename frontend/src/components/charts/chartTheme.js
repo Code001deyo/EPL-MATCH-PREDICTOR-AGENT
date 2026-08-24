@@ -15,15 +15,25 @@
 import { C, semantic } from "../../theme";
 
 // Series colours, in the order a chart should reach for them.
+//
+// Both are brand colours — PL purple and PL green — and neither is grey. Grey
+// series on a white card wash out: at 1-2px a #cbd5e1 line is barely above the
+// gridlines, so the baseline the model is being judged against was the hardest
+// thing on the chart to see. The comparison has to be legible for the comparison
+// to mean anything.
+//
+// The green used is blueDark (#00b368) rather than the signature #00ff85: the
+// bright green is a fill and background colour, and as a 2px line on white it has
+// too little contrast to read.
 export const series = {
   primary: C.navy,        // PL purple — the subject of the chart (the model)
-  accent: C.blue,         // PL green — the comparison the subject is measured against
-  muted: C.slate400,      // supporting series that must not compete for attention
-  baseline: C.slate300,   // reference lines: the diagonal, always-home, zero
+  accent: C.blue,         // PL green — a second series of equal standing
+  muted: C.blueDark,      // supporting series that must not compete for attention
+  baseline: C.blueDark,   // reference lines: the diagonal, always-home, zero
 };
 
-// A baseline is not a rival series. Dashed and grey so the eye reads it as the
-// floor being cleared rather than as a second thing to track.
+// A baseline is not a rival series, so it stays dashed — the dash pattern, not a
+// washed-out colour, is what says "this is the floor being cleared".
 export const baselineLine = {
   stroke: series.baseline,
   strokeWidth: 2,
@@ -37,6 +47,8 @@ export const axis = {
   tickLine: false,
 };
 
+// Gridlines are the one place a pale neutral is right: they are furniture behind
+// the data, not a series competing with it.
 export const grid = {
   strokeDasharray: "3 3",
   stroke: C.slate100,

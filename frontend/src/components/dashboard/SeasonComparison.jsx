@@ -3,6 +3,7 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import Card from "../ui/Card";
 import SectionTitle from "../ui/SectionTitle";
 import EmptyState from "../ui/EmptyState";
+import InfoTip from "../ui/InfoTip";
 import { C, type, space } from "../../theme";
 import { series, axis, grid, tooltipStyle, legendStyle, pct, deltaColor } from "../charts/chartTheme";
 import useBacktest from "../../hooks/useBacktest";
@@ -24,9 +25,14 @@ export default function SeasonComparison() {
 
   return (
     <Card>
-      <SectionTitle sub="Each backtested season scored on its own. The headline figure is an average over these, and they are not alike.">
-        Season by season
-      </SectionTitle>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
+        <span style={{ ...type.section, color: C.slate800 }}>Season by season</span>
+        <InfoTip label="About the season comparison">
+          Each backtested season scored on its own, against the always-home baseline for the
+          same fixtures. The headline backtest figure is an average over these seasons, and
+          they are not alike — the edge has narrowed each year.
+        </InfoTip>
+      </div>
 
       {state === "loading" && <EmptyState kind="loading" />}
       {state === "error" && <EmptyState kind="error" title="Could not load the backtest" />}
@@ -50,7 +56,10 @@ export default function SeasonComparison() {
                 <LabelList dataKey="correct_result_pct" position="top" formatter={(v) => `${v}%`}
                   style={{ fontSize: 11, fill: C.slate600, fontWeight: 700 }} />
               </Bar>
-              <Bar dataKey="always_home_pct" name="Always home" fill={C.slate300} radius={[4, 4, 0, 0]} maxBarSize={44} />
+              {/* Green, not grey: the baseline bar was the palest thing on a white
+                  card, which made the one comparison the chart exists for the
+                  hardest part of it to read. */}
+              <Bar dataKey="always_home_pct" name="Always home" fill={series.accent} radius={[4, 4, 0, 0]} maxBarSize={44} />
             </BarChart>
           </ResponsiveContainer>
 

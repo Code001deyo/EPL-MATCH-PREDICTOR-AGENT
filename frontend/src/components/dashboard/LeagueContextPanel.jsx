@@ -42,7 +42,7 @@ export default function LeagueContextPanel({ league, loading, season }) {
                   <XAxis type="number" domain={[0, 15]} tick={{ fontSize: 11 }} />
                   <YAxis type="category" dataKey="team" tick={{ fontSize: 11 }} width={80} />
                   <Tooltip formatter={(v) => [`${v} pts`, "Form points"]} />
-                  <Bar dataKey="pts" fill={C.slate400} radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="pts" fill={C.navy} radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </>

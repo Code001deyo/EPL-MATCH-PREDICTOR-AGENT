@@ -1,58 +1,63 @@
 import Card from "../ui/Card";
-import SectionTitle from "../ui/SectionTitle";
 import Badge, { resultVariant } from "../ui/Badge";
 import EmptyState from "../ui/EmptyState";
-import { C } from "../../theme";
+import DataTable from "../ui/DataTable";
+import InfoTip from "../ui/InfoTip";
+import { C, type } from "../../theme";
 
-// "Not yet played" and "wrong" must never look alike — a fixture with no
-// actual score is unresolved, not a model failure. Badge already encodes
-// that distinction (pending vs wrong); this panel just makes sure the
-// "actual" column reads unambiguously as "hasn't happened" rather than "—"
-// which is easy to misread as a missing/broken value.
-export default function RecentPredictions({ history, loading }) {
+/* Recent predictions, with settlement status.
+ *
+ * "Not yet played" and "wrong" must never look alike — a fixture with no actual
+ * score is unresolved, not a model failure. Badge already encodes that
+ * distinction; the Actual column spells it out rather than showing a bare "—",
+ * which reads as a missing or broken value.
+ *
+ * Now on the shared DataTable, and scoped server-side by season rather than being
+ * fetched whole and sliced in the browser. */
+export default function RecentPredictions({ history, loading, season }) {
+  const columns = [
+    { key: "fixture", header: "Fixture", nowrap: true, minWidth: 168,
+      render: (p) => <span style={{ fontWeight: 600, color: C.slate800 }}>{p.fixture}</span> },
+    { key: "matchweek", header: "MW", numeric: true, width: 48,
+      render: (p) => <span style={{ color: C.slate500 }}>{p.matchweek}</span> },
+    { key: "predicted", header: "Predicted", align: "center", width: 84,
+      render: (p) => <span style={{ fontWeight: 700, color: C.navy, fontSize: 15 }}>{p.predicted}</span> },
+    { key: "actual", header: "Actual", align: "center", width: 104, nowrap: true,
+      render: (p) => {
+        const notPlayed = !p.actual || p.actual.includes("null");
+        return (
+          <span style={{ color: notPlayed ? C.slate400 : C.slate700, fontStyle: notPlayed ? "italic" : "normal" }}>
+            {notPlayed ? "not yet played" : p.actual}
+          </span>
+        );
+      } },
+    { key: "status", header: "Status", align: "center", width: 78,
+      render: (p) => <Badge variant={resultVariant(p.predicted, p.actual)} small /> },
+    { key: "confidence", header: "Conf.", numeric: true, width: 60,
+      render: (p) => <span style={{ color: C.slate500 }}>
+        {Number.isFinite(p.confidence) ? `${(p.confidence * 100).toFixed(0)}%` : "—"}
+      </span> },
+  ];
+
   return (
     <Card>
-      <SectionTitle sub="Most recent predictions, with settlement status">Recent Predictions</SectionTitle>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
+        <span style={{ ...type.section, color: C.slate800 }}>Recent predictions</span>
+        <InfoTip label="About recent predictions">
+          Predictions made through the app for {season || "the selected season"}, settled
+          against the real result once the fixture has been played. These are self-selected —
+          whatever fixtures users happened to click — so they measure usage, not the model.
+          The model's own accuracy is the holdout and backtest figures above.
+        </InfoTip>
+      </div>
 
       {loading && <EmptyState kind="loading" title="Loading predictions…" />}
 
-      {!loading && history.length === 0 && (
-        <EmptyState kind="not-measured" title="No predictions yet" detail="Go to Predict to generate the first one." />
-      )}
-
-      {!loading && history.length > 0 && (
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-          <thead>
-            <tr style={{ borderBottom: `2px solid ${C.slate100}` }}>
-              {["Fixture", "Season", "MW", "Predicted", "Actual", "Status", "Confidence"].map((h) => (
-                <th key={h} style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: C.slate500, fontSize: 11, textTransform: "uppercase" }}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {history.map((p) => {
-              const notPlayed = !p.actual || p.actual.includes("null");
-              const variant = resultVariant(p.predicted, p.actual);
-              return (
-                <tr key={p.id} style={{ borderBottom: `1px solid ${C.slate100}` }}>
-                  <td style={{ padding: "10px 12px", fontWeight: 500, color: C.slate800 }}>{p.fixture}</td>
-                  <td style={{ padding: "10px 12px", color: C.slate500 }}>{p.season}</td>
-                  <td style={{ padding: "10px 12px", color: C.slate500 }}>MW{p.matchweek}</td>
-                  <td style={{ padding: "10px 12px", fontWeight: 700, color: C.navy, fontSize: 15 }}>{p.predicted}</td>
-                  <td style={{ padding: "10px 12px", color: notPlayed ? C.slate300 : C.slate600, fontStyle: notPlayed ? "italic" : "normal" }}>
-                    {notPlayed ? "not yet played" : p.actual}
-                  </td>
-                  <td style={{ padding: "10px 12px" }}><Badge variant={variant} small /></td>
-                  <td style={{ padding: "10px 12px", color: C.slate500 }}>
-                    {Number.isFinite(p.confidence) ? `${(p.confidence * 100).toFixed(0)}%` : "not measured"}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      {!loading && (
+        <DataTable
+          columns={columns} rows={history} dense rowKey={(p) => p.id}
+          empty={`No predictions for ${season || "this season"} yet — go to Predict to make one.`}
+        />
       )}
     </Card>
   );

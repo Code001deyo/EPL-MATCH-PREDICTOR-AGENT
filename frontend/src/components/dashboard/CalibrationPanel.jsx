@@ -4,6 +4,7 @@ import { ComposedChart, Line, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, Res
 import Card from "../ui/Card";
 import SectionTitle from "../ui/SectionTitle";
 import EmptyState from "../ui/EmptyState";
+import InfoTip from "../ui/InfoTip";
 import { C } from "../../theme";
 import { series, axis, grid, tooltipStyle } from "../charts/chartTheme";
 import { invalidateBacktest } from "../../hooks/useBacktest";
@@ -53,9 +54,15 @@ export default function CalibrationPanel() {
 
   return (
     <Card>
-      <SectionTitle sub="Predicted probability bucket vs observed frequency. Points on the diagonal are well-calibrated; above it the model is under-confident, below it over-confident.">
-        Calibration
-      </SectionTitle>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: C.slate800 }}>Calibration</span>
+        <InfoTip label="About calibration">
+          Predicted probability bucket against observed frequency. Points on the dashed
+          diagonal are well calibrated; above it the model is under-confident, below it
+          over-confident. This answers whether a stated 70% actually happens about 70% of
+          the time.
+        </InfoTip>
+      </div>
 
       {status === "loading" && <EmptyState kind="loading" title="Loading calibration data…" />}
 
@@ -91,7 +98,7 @@ export default function CalibrationPanel() {
 
 function CalibrationChart({ buckets }) {
   return (
-    <ResponsiveContainer width="100%" height={260}>
+    <ResponsiveContainer width="100%" height={230}>
       <ComposedChart margin={{ top: 10, right: 20, bottom: 10, left: 0 }}>
         <CartesianGrid {...grid} vertical />
         <XAxis
@@ -109,7 +116,10 @@ function CalibrationChart({ buckets }) {
         />
         {/* Grey and dashed: the diagonal is the reference the points are read
             against, not a series competing with them. */}
-        <Line data={DIAGONAL} dataKey="y" stroke={C.slate300} strokeDasharray="4 4" dot={false} name="Perfect calibration" legendType="none" />
+        {/* The diagonal is the whole point of the chart — points are read as
+            above or below it — so it is green and dashed rather than a faint
+            grey that disappeared into the gridlines. */}
+        <Line data={DIAGONAL} dataKey="y" stroke={series.baseline} strokeWidth={2} strokeDasharray="4 4" dot={false} name="Perfect calibration" legendType="none" />
         <Scatter data={buckets.map((b) => ({ x: b.predicted, y: b.observed, count: b.count }))}
           dataKey="y" fill={series.primary} name="Observed" />
       </ComposedChart>
