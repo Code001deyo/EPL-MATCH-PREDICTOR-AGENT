@@ -5,7 +5,7 @@
 ## The rewrite is the whole design
 
 ```
-/api/:path*  ->  https://<space>.hf.space/:path*
+/api/:path*  ->  https://epl-predictor-api-pccd.onrender.com/:path*
 ```
 
 Vercel proxies this **server-side**, so the browser only ever talks to one origin.
@@ -27,8 +27,8 @@ matters: without it the fallback would swallow the API proxy.
 
 1. Import the GitHub repo into Vercel.
 2. Set **Root Directory** to `frontend`. Everything else is inferred.
-3. Replace `REPLACE-ME` in `vercel.json` with the real Space host
-   (`owner/space-name` becomes `owner-space-name.hf.space`, lowercased) and push.
+3. The backend host is already set in `vercel.json`. If the Render service is
+   ever recreated its URL changes, so update the rewrite destination and push.
 
 Vercel's own GitHub integration builds on every push to `main`, so no workflow is
 needed here — the file and the connection are the entire configuration.
