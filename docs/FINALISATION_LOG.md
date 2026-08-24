@@ -444,3 +444,146 @@ kept` — the no-clobber guard holds. Container runs as `uid=1000(appuser)`.
 - **Nothing is deployed yet.** The configuration is written and locally verified;
   creating the HF Space, setting `HF_TOKEN`/`HF_SPACE` and connecting Vercel are
   account actions that need the owner.
+
+
+---
+
+# Round 3 - Division separation, dashboard rebuild, HF CLI deploy (2026-08-24)
+
+## R1 - The two leagues were blended everywhere they were reported
+
+Reported by the user ("Hull and Coventry on top of the table"), confirmed in code:
+`backend/routers/analytics.py` had **no division filter anywhere**. Its only filter
+was `MatchResult.season == season`, so every figure downstream was computed over
+both divisions:
+
+- The 2025-26 "Premier League" table returned **44 clubs**, including Wrexham,
+  Millwall, QPR, Bristol City, Charlton, Oxford, Derby and Portsmouth.
+- **Coventry ranked 1st on 46 games played and 95 points** - its E0 and E1 matches
+  summed into one row. Hull 4th on 46.
+- "Matches played" read **470**, not 380, so avg goals/game and every win rate used
+  the wrong denominator.
+- `/head-to-head` and `/team/{team}/form` had the same gap.
+
+This is the same class of bug as the `/teams` leak fixed in round 2, in the
+endpoints nobody re-checked afterwards. The fix is therefore a **boundary**, not a
+filter per handler: `db/teams.py` now owns `division_filter`, `resolve_division`
+and `is_played`, and every reporting query goes through it.
+
+**Three further defects surfaced during the sweep, all mine:**
+
+1. **`_is_matchweek_corrupted` wiped the whole database on boot.** It checks
+   `max(matchweek) > 38` across *all* divisions; the Championship's 46 rounds read
+   as corruption, so the guard truncated `match_results` and reseeded - and since
+   the reseed re-adds those same 46-round rows, it would have done it again on
+   **every boot, forever**. Now scoped to E0.
+2. **`refresh_current_season` deleted the whole current season** and re-inserted
+   Premier League fixtures only, so every 6-hourly refresh destroyed the in-progress
+   Championship season. It runs on boot, which is why the 2026-27 E1 rows kept
+   vanishing minutes after being seeded. Now scoped to E0.
+3. **`enrich_season` iterated every row in the season** regardless of division, so
+   enriching E0 walked 932 fixtures against a 380-row file and reported 552
+   "unmatched". Worse, the loop *writes* `fixture.division`, so it was one
+   name/date collision away from relabelling a second-tier match as top-flight.
+
+**An unknown division returned "no data" rather than an error.** `?division=E7`
+and `?division=` both fell through to `WHERE division = 'E7'`, matched nothing, and
+returned "No played matches for this season and division" - indistinguishable from
+a season that genuinely has none. This bit immediately: a `<select>` rendered
+before its options had loaded sent an empty string, and the dashboard showed blank
+cards with no error anywhere. `resolve_division` now 400s on an unknown division and
+treats empty as the default.
+
+## R1b - Both leagues, all seasons
+
+The user then asked for both tables across all seasons. The Championship data
+stored at that point was **not a league**: `promoted.py` pulls only the matches
+involving clubs about to be promoted - **90 rows of a 552-match season**, and only
+for two seasons. A table built from that would have been confidently wrong.
+
+`data/championship.py` now ingests complete E1 seasons from football-data.co.uk.
+Result: **3,876 Championship matches** across all 8 seasons (7 complete at 552, plus
+the in-progress 2026-27), de-duplicated against the existing fragments - 2024-25 and
+2025-26 added exactly 462 each, which is 552 minus 90.
+
+Rounds are **derived**, not sourced: the E1 files carry no gameweek, which is why
+every Championship row previously sat at `matchweek=0`. Fixtures are ordered by date
+and cut into blocks of twelve. This is an approximation and is labelled as one - a
+postponed fixture lands in a later block than the round it belonged to. The league
+table does not depend on it at all.
+
+**This changes model inputs.** `strength.py` uses Championship rates to seed a
+promoted club's first top-flight attack/defence rating and its starting Elo. That
+seed is now computed from a full 46-match season rather than whichever handful the
+fragment held. A retrain was run and the metric delta is reported rather than
+absorbed.
+
+## R2 - Season and division actually filter
+
+`season` was accepted on `/analytics/league` alone, so the dashboard's selector
+drove 2 of 8 panels. Added as optional parameters (defaulting to current behaviour)
+to `/analytics/model/performance`, `/predictions/history`, `/model/backtest`, and
+`division` to `/teams/by-division`, `/fixtures/recent`, `/fixtures/season/{season}`,
+`/team/{name}/stats`. New `/divisions` reports the leagues actually present with
+their match counts.
+
+Asking `/model/backtest` for a season the backtest did not cover returns the covered
+seasons rather than an empty chart, so the UI can say which seasons exist instead of
+rendering a blank panel that looks like a failure.
+
+## R3 - The dashboard is a dashboard
+
+The rule applied: **the summary fits one screen, detail lives below the fold.**
+Previously the first viewport held a header, one 290px performance band and the top
+40px of a chart - nothing comparable was ever on screen together.
+
+Above the fold at 1366x768: header (52px) + six-card summary strip (96px) + the two
+charts that answer "is it working" and "can I trust the probabilities", side by side.
+Verified in the browser.
+
+- `ui/MetricCard.jsx` - one card for "a number with a label". There had been three
+  visual languages for this (KpiCard, Card+Stat, bare divs), so three pages read as
+  three products. Carries a signed delta chip that goes neutral grey below a
+  threshold, so +2.6 points does not wear the same confident green as +12.
+- `ui/InfoTip.jsx` - the caveats moved here rather than being deleted. Opens on
+  hover **and** focus/click, so they are not unreachable by keyboard or on touch.
+  Full prose still lives on the Model page.
+- `ui/DataTable.jsx` - one table treatment; numerics right-aligned with tabular
+  figures, which is the difference between a column of scores being comparable and
+  not.
+- `dashboard/LeagueTable.jsx` - both divisions, switched by a tab that makes the
+  boundary visible.
+- `dashboard/SummaryStrip.jsx` - replaces ModelPerformanceBand; the verdict
+  paragraph is now a delta chip plus an info tip.
+
+Three honesty fixes found while building it:
+
+- **"Loading" and "absent" rendered identically.** The backtest card read "no
+  backtest" for the second the request was in flight - the app asserting an absence
+  it had not established.
+- **A 78% home-win rate from 9 matches** was rendered in the same type at the same
+  size as a 380-match figure. Below a third of a season the card now says
+  "small sample" and the info tip says it will move substantially.
+- With the Championship selected, the model cards say **"Premier League model"** -
+  they describe a model that has never seen a Championship match.
+
+## R4 - Deploy from the CLI
+
+`scripts/deploy-hf.sh <owner>/<space>` - creates the Space, stages, uploads, then
+**polls the deployed `/health` until it answers**. Uses the current `hf` CLI and
+detects the deprecated `huggingface-cli`, telling you how to upgrade rather than
+failing on a missing subcommand. The token comes from an `hf auth` session or
+`$HF_TOKEN`; it is never pasted and never written to disk.
+
+`scripts/stage-space.sh` is shared with `deploy-backend.yml`, so the manual and CI
+paths are byte-identical rather than two copies that drift. It fails loudly if
+`backend/seed/` is missing - a Space deployed without it boots fine and then answers
+503 on `/predict`.
+
+## Tests
+
+**76 pass** (63 previous + 13 in `tests/test_divisions.py`): the top-flight filter
+excludes E1 and vice versa, NULL divisions count as top-flight, a club present in
+both divisions is counted once per division, an unknown division is rejected rather
+than returning empty, unplayed fixtures are excluded from aggregates, and derived
+Championship rounds fall in blocks of twelve without reordering rows.

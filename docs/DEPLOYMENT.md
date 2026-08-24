@@ -63,9 +63,31 @@ becomes `owner-space-name.hf.space`, lowercased — and push. See `frontend/VERC
 
 ### 3. Deploy
 
-`git push origin main`. CI runs first; the backend deploy waits on it and then
-polls the Space's `/health` until it answers, so the job only goes green when the
-deployed API is actually up.
+**First deploy, or any manual push** — from your machine:
+
+```bash
+pip install -U huggingface_hub     # provides the `hf` CLI
+hf auth login                      # or: export HF_TOKEN=...
+./scripts/deploy-hf.sh <owner>/<space-name>
+```
+
+The script creates the Space if it does not exist, stages the tree, uploads it,
+then **polls the deployed `/health` until it answers** and prints the host to put
+in `frontend/vercel.json`. It reads the token from your `hf auth` session or
+`$HF_TOKEN` — it never asks you to paste one and never writes one to disk.
+
+Note the CLI was renamed: `huggingface-cli` is deprecated in favour of `hf`. The
+script detects an old install and tells you how to upgrade rather than failing
+with a missing-subcommand error.
+
+**Every deploy after that** — `git push origin main`. CI runs the tests first; the
+backend deploy waits on them and then polls `/health` the same way, so the job only
+goes green when the deployed API is actually up.
+
+Both paths stage the Space with the **same** `scripts/stage-space.sh`, so what you
+push by hand and what CI pushes are byte-identical. That script also fails loudly
+if `backend/seed/` is missing, because a Space deployed without it boots fine and
+then answers 503 on `/predict` — a silent, delayed failure.
 
 ## Limits that will actually be hit
 
@@ -99,6 +121,12 @@ behind the job API.
 
 **Image size is 1.55GB**, dominated by XGBoost, pandas and scipy. HF builds it
 remotely, so a first deploy takes several minutes.
+
+**The database now carries two divisions.** 2,669 Premier League matches and 3,876
+Championship matches. The Championship is present because promoted clubs need real
+prior form instead of NaN on matchday one, and because the app reports both tables.
+Every reporting endpoint takes a `division` parameter defaulting to `E0`; the model
+is trained and scored on `E0` only.
 
 ## Rolling back
 

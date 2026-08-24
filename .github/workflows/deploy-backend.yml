@@ -36,32 +36,11 @@ jobs:
           test -n "${{ secrets.HF_TOKEN }}" || { echo "::error::repository secret HF_TOKEN is not set"; exit 1; }
 
       - name: Stage the Space repo
-        run: |
-          set -e
-          mkdir -p /tmp/space
-          cp -r backend/. /tmp/space/
-          rm -rf /tmp/space/__pycache__ /tmp/space/.pytest_cache
-          # HF reads its configuration from README.md frontmatter and expects the
-          # Dockerfile at the repo root — which is why the backend subtree is
-          # pushed as the Space's root rather than the whole repository.
-          cat > /tmp/space/README.md <<'EOF'
-          ---
-          title: EPL Predictor API
-          emoji: ⚽
-          colorFrom: purple
-          colorTo: green
-          sdk: docker
-          app_port: 8000
-          pinned: false
-          ---
-
-          FastAPI + XGBoost backend for the EPL Score Predictor.
-
-          Deployed automatically from
-          [Code001deyo/EPL-MATCH-PREDICTOR-AGENT](https://github.com/Code001deyo/EPL-MATCH-PREDICTOR-AGENT).
-          Do not edit this Space directly — changes here are overwritten on the
-          next push to `main`.
-          EOF
+        # Same script the manual deploy uses (scripts/deploy-hf.sh), so what CI
+        # pushes and what a developer pushes by hand are byte-identical. It also
+        # fails loudly if the seed snapshot is missing, which would otherwise
+        # deploy a Space that boots and then answers 503 on /predict.
+        run: bash scripts/stage-space.sh /tmp/space
 
       - name: Push to the Space
         env:
