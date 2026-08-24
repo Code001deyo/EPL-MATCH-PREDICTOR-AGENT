@@ -20,7 +20,14 @@ COPY . .
 # Both are written at runtime and must be owned by the runtime user. saved_models
 # is created here rather than relying on the app to mkdir it, because by then the
 # process has already dropped to appuser and cannot create it under a root /app.
-RUN mkdir -p saved_models dbdata && chown -R appuser:appuser /app
+# chmod is not belt-and-braces here, it is the fix. Windows Git does not track
+# the executable bit, so entrypoint.sh was committed as 100644 and the container
+# exited with status 128 on Render before printing a single line. Local builds hid
+# it: Docker Desktop applies 0755 to files copied from the Windows filesystem, so
+# the image built here was executable and the one built from a clean git clone was
+# not. Setting it in the Dockerfile makes the image correct regardless of what
+# mode the checkout happens to carry.
+RUN mkdir -p saved_models dbdata     && chmod +x /app/entrypoint.sh     && chown -R appuser:appuser /app
 
 USER appuser
 
