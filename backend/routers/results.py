@@ -1,33 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from db.database import get_db, Prediction
 
 router = APIRouter()
 
 
-class ActualResult(BaseModel):
-    prediction_id: int
-    actual_home: int
-    actual_away: int
-
-
-@router.post("/results")
-def submit_result(body: ActualResult, db: Session = Depends(get_db)):
-    pred = db.query(Prediction).filter(Prediction.id == body.prediction_id).first()
-    if not pred:
-        raise HTTPException(status_code=404, detail="Prediction not found")
-    pred.actual_home = body.actual_home
-    pred.actual_away = body.actual_away
-    db.commit()
-    correct_score = pred.predicted_home == body.actual_home and pred.predicted_away == body.actual_away
-    pred_result = "H" if pred.predicted_home > pred.predicted_away else ("D" if pred.predicted_home == pred.predicted_away else "A")
-    actual_result = "H" if body.actual_home > body.actual_away else ("D" if body.actual_home == body.actual_away else "A")
-    return {
-        "updated": True,
-        "correct_score": correct_score,
-        "correct_result": pred_result == actual_result,
-    }
+# POST /results was removed deliberately.
+#
+# It took a prediction id and a scoreline and wrote them straight into
+# `actual_home`/`actual_away`, with no authentication. On a public deployment that
+# is not a feature with a missing check — it is an endpoint whose only capability
+# is falsifying the accuracy figures the dashboard reports. Anyone could have made
+# the model look flawless or broken.
+#
+# Nothing legitimate needed it: actual results are derived from real match data by
+# db/settlement.py, which matches a prediction to its fixture and copies the score
+# that actually happened. Adding an admin guard would have preserved a capability
+# with no honest use, so the endpoint is gone instead.
 
 
 @router.get("/predictions/history")
@@ -57,6 +46,11 @@ def prediction_history(season: str = None, limit: int = None, db: Session = Depe
             "away_win_prob": p.away_win_prob,
             "confidence": p.confidence,
             "created_at": p.created_at,
+            "updated_at": p.updated_at,
+            # Surfaced so a re-prediction is visible. Collapsing duplicates into
+            # one row must not also erase that the fixture was predicted more
+            # than once — that is information, not noise.
+            "times_predicted": p.times_predicted or 1,
         }
         for p in preds
     ]}

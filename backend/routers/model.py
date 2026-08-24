@@ -7,7 +7,9 @@ bootstrap and data-freshness reporting.
 import json
 import os
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends
+
+from auth import require_admin, HTTPException, Response
 from sqlalchemy.orm import Session
 
 import jobs
@@ -42,7 +44,7 @@ def _require_data(db, action: str):
     return df
 
 
-@router.post("/retrain", status_code=202)
+@router.post("/retrain", status_code=202, dependencies=[Depends(require_admin)])
 def retrain_model(response: Response, db: Session = Depends(get_db)):
     """Start a retrain and return immediately with a job id.
 
@@ -80,7 +82,7 @@ def retrain_model(response: Response, db: Session = Depends(get_db)):
     return {"job_id": job["id"], "state": job["state"], "started": created, "job": job}
 
 
-@router.post("/backtest/run", status_code=202)
+@router.post("/backtest/run", status_code=202, dependencies=[Depends(require_admin)])
 def backtest_run(response: Response, seasons: int = 3, db: Session = Depends(get_db)):
     """Trigger a fresh walk-forward backtest. Replaces any previously stored
     run — see models/backtest.py for what "walk-forward" means here.

@@ -1,21 +1,37 @@
 from fastapi import FastAPI, Depends, Response
+import os
+
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from db.database import init_db, get_db
 from data.ingestion import get_season_ids, current_season_id, _current_season_label
 import lifecycle
-from routers import predict, teams, results, analytics, analytics_model, model as model_router
+from routers import predict, teams, results, analytics, analytics_model, auth_router, model as model_router
 
 app = FastAPI(title="EPL Score Predictor", version="1.0.0")
 
+# Narrowed from ["*"]. The browser reaches this API same-origin through the
+# frontend's /api rewrite, so a permissive policy bought nothing and let any site
+# on the internet call the API with a visitor's cookies attached.
+#
+# allow_credentials is required for the admin session cookie to survive a
+# cross-origin request, and the CORS spec forbids pairing it with "*" — which is
+# an independent reason the wildcard had to go.
+_origins = [o.strip() for o in os.environ.get(
+    "ALLOWED_ORIGINS",
+    "http://localhost:3000,https://novapl.vercel.app",
+).split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.include_router(auth_router.router)
 app.include_router(predict.router)
 app.include_router(teams.router)
 app.include_router(results.router)

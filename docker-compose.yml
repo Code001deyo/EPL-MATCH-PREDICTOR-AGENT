@@ -26,6 +26,14 @@ services:
       - DATA_DIR=/app/dbdata
       # Background refresh of the in-progress season. 0 disables the loop.
       - REFRESH_INTERVAL_HOURS=6
+      # Admin credentials come from .env, which is gitignored. Absent, the app
+      # still runs — admin endpoints simply return 503 rather than being open.
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-}
+      - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH:-}
+      - SESSION_SECRET=${SESSION_SECRET:-}
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-}
+      # Local dev is plain http, so the session cookie cannot be Secure-only here.
+      - COOKIE_SECURE=${COOKIE_SECURE:-1}
     networks:
       - eplnet
     restart: unless-stopped

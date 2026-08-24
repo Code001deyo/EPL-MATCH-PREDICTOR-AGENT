@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from db.database import get_db, MatchResult
+from auth import require_admin
 from db.teams import DIVISIONS, TOP_FLIGHT, division_filter, resolve_division, top_flight_teams
 import requests
 
@@ -185,7 +186,7 @@ def current_season_fixtures(db: Session = Depends(get_db)):
     return fixtures_by_season(current_season(), db)
 
 
-@router.post("/data/refresh")
+@router.post("/data/refresh", dependencies=[Depends(require_admin)])
 def refresh_data():
     """Refresh the in-progress season: re-fetch, re-attach statistics, settle.
 

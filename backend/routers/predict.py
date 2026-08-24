@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from datetime import datetime, date
@@ -7,6 +7,7 @@ import json
 
 from db.database import get_db, Prediction, MatchResult
 from db.teams import is_top_flight
+from ratelimit import limit
 from data.features import load_matches, build_feature_vector
 from data.ingestion import _current_season_label
 from models.ml_model import predict, get_feature_importance
@@ -24,7 +25,11 @@ class PredictRequest(BaseModel):
 
 
 @router.post("/predict")
-def predict_fixture(req: PredictRequest, db: Session = Depends(get_db)):
+def predict_fixture(req: PredictRequest, request: Request, db: Session = Depends(get_db)):
+    # Public endpoint on an ephemeral disk: without a brake, one script fills
+    # the database and saturates a 0.1 vCPU instance. Generous enough that a
+    # person clicking through fixtures never notices.
+    limit(request, "predict", capacity=30, per_seconds=60)
     # Resolve fixture from DB if fixture_id provided
     if req.fixture_id is not None:
         fixture_row = db.query(MatchResult).filter(MatchResult.id == req.fixture_id).first()
@@ -94,23 +99,52 @@ def predict_fixture(req: PredictRequest, db: Session = Depends(get_db)):
     if req.fixture_id is not None and fixture_row:
         actual_score = f"{fixture_row.home_goals}-{fixture_row.away_goals}"
 
-    record = Prediction(
-        fixture=f"{home_team} vs {away_team}",
-        season=season,
-        matchweek=matchweek,
-        predicted_home=result["predicted_home"],
-        predicted_away=result["predicted_away"],
-        home_win_prob=result["home_win_prob"],
-        draw_prob=result["draw_prob"],
-        away_win_prob=result["away_win_prob"],
-        confidence=result["confidence"],
-        key_drivers=json.dumps(drivers),
-        predicted_stats=json.dumps(result.get("predicted_stats", {})),
-        actual_home=fixture_row.home_goals if req.fixture_id else None,
-        actual_away=fixture_row.away_goals if req.fixture_id else None,
-        created_at=datetime.utcnow().isoformat(),
+    # ONE prediction per fixture. Re-predicting updates the existing row rather
+    # than appending a new one — before this, clicking Predict on the same match
+    # twice put it in History twice, and the live database had "Arsenal vs Chelsea"
+    # listed under 2026-27 two separate times from ordinary use.
+    #
+    # The key matches settlement's: (season, fixture). Two clubs meet at a given
+    # ground once per campaign, verified unique across all 6,545 stored matches.
+    fixture_label = f"{home_team} vs {away_team}"
+    now = datetime.utcnow().isoformat()
+
+    record = (
+        db.query(Prediction)
+        .filter(Prediction.season == season, Prediction.fixture == fixture_label)
+        .first()
     )
-    db.add(record)
+    created = record is None
+    if created:
+        record = Prediction(
+            fixture=fixture_label,
+            season=season,
+            created_at=now,
+            times_predicted=0,
+        )
+        db.add(record)
+
+    # The forecast itself is always replaced: a newer prediction reflects a newer
+    # model and more data, so keeping the older one would be keeping the worse one.
+    record.matchweek = matchweek
+    record.predicted_home = result["predicted_home"]
+    record.predicted_away = result["predicted_away"]
+    record.home_win_prob = result["home_win_prob"]
+    record.draw_prob = result["draw_prob"]
+    record.away_win_prob = result["away_win_prob"]
+    record.confidence = result["confidence"]
+    record.key_drivers = json.dumps(drivers)
+    record.predicted_stats = json.dumps(result.get("predicted_stats", {}))
+    record.times_predicted = (record.times_predicted or 0) + 1
+    record.updated_at = now
+
+    # A settled result is never unset by a re-prediction. Overwriting it with None
+    # for a fixture predicted by team name would silently un-settle a match that
+    # has already been played and scored.
+    if req.fixture_id is not None and fixture_row is not None:
+        record.actual_home = fixture_row.home_goals
+        record.actual_away = fixture_row.away_goals
+
     db.commit()
     db.refresh(record)
 
