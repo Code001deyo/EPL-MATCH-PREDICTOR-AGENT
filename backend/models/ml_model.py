@@ -1,6 +1,7 @@
 import numpy as np
 import joblib
 import os
+import threading
 from sklearn.metrics import mean_absolute_error
 from scipy.stats import poisson
 
@@ -230,6 +231,11 @@ def train(df, on_progress=None):
     metrics["accuracy"] = _outcome_accuracy(df, X, split)
 
     _save_metrics(metrics)
+    # The .pkl files on disk have all been rewritten above. Drop the in-memory
+    # copies so the next prediction picks up the model that was just trained
+    # rather than the one it replaced. The mtime key would catch this on its own;
+    # clearing here makes the handover explicit at the moment it happens.
+    invalidate_model_cache()
     _tick("complete")
     return metrics
 
@@ -459,25 +465,84 @@ def _save_metrics(metrics: dict) -> None:
         json.dump(payload, fh, indent=2)
 
 
+# Loaded models, keyed by target name -> (mtime, model).
+#
+# Every /predict used to call joblib.load() for all twelve targets: roughly 5.8 MB
+# of pickle read from disk per request, which measured as ~1.13s of a 4.56s
+# prediction on a fast local disk. On the deployed free instance, with a slower
+# disk and 0.1 vCPU, it was the single largest cost in the request.
+#
+# Keyed on the file's mtime rather than just its path, so a retrain that rewrites
+# the .pkl is picked up on the next prediction without restarting the process.
+# A plain cache would have served the old model indefinitely after a retrain —
+# silently, with nothing in the output to show which model answered.
+_MODEL_CACHE: dict = {}
+_CACHE_LOCK = threading.Lock()
+
+
+def _load_cached(target: str):
+    """Load a model, reusing the in-memory copy while the file is unchanged."""
+    path = _model_path(target)
+    if not os.path.exists(path):
+        return None
+    mtime = os.path.getmtime(path)
+    cached = _MODEL_CACHE.get(target)
+    if cached is not None and cached[0] == mtime:
+        return cached[1]
+    # Two concurrent predictions can both miss; the lock stops them both
+    # deserialising the same file, which is the exact moment ten simultaneous
+    # users would otherwise multiply the disk cost by ten.
+    with _CACHE_LOCK:
+        cached = _MODEL_CACHE.get(target)
+        if cached is not None and cached[0] == mtime:
+            return cached[1]
+        model = joblib.load(path)
+        _MODEL_CACHE[target] = (mtime, model)
+        return model
+
+
+def invalidate_model_cache():
+    """Drop every cached model. Called after training writes new .pkl files."""
+    with _CACHE_LOCK:
+        _MODEL_CACHE.clear()
+
+
 def load_models():
-    home_path = _model_path("home_goals")
-    away_path = _model_path("away_goals")
-    if not os.path.exists(home_path) or not os.path.exists(away_path):
+    home = _load_cached("home_goals")
+    away = _load_cached("away_goals")
+    if home is None or away is None:
         raise FileNotFoundError("Models not trained yet. POST /model/retrain first.")
-    return joblib.load(home_path), joblib.load(away_path)
+    return home, away
 
 
 def _poisson_probs(home_lambda: float, away_lambda: float, max_goals: int = 8):
-    home_win, draw, away_win = 0.0, 0.0, 0.0
-    for h in range(max_goals + 1):
-        for a in range(max_goals + 1):
-            p = poisson.pmf(h, home_lambda) * poisson.pmf(a, away_lambda)
-            if h > a:
-                home_win += p
-            elif h == a:
-                draw += p
-            else:
-                away_win += p
+    """W/D/L probabilities from two independent Poisson rates.
+
+    Identical arithmetic to the nested loop this replaces, computed as an outer
+    product instead. The loop called `scipy.stats.poisson.pmf` twice per cell —
+    162 scipy calls for a 9x9 grid, and profiling put it at **46% of the entire
+    prediction**, because each of those calls carries scipy's full distribution
+    machinery (argument broadcasting, validation, masking) to evaluate one scalar.
+
+    Here each rate's pmf is evaluated once as a 9-vector and the grid is their
+    outer product; `np.triu`/`np.tril` then sum the cells above, on and below the
+    diagonal. Same numbers, two scipy calls instead of 162.
+
+    The independence assumption is unchanged and still worth naming: real scorelines
+    are mildly correlated at low counts, which biases draws low. Dixon-Coles applies
+    a correction for that; this does not.
+    """
+    goals = np.arange(max_goals + 1)
+    home_pmf = poisson.pmf(goals, home_lambda)
+    away_pmf = poisson.pmf(goals, away_lambda)
+    grid = np.outer(home_pmf, away_pmf)      # grid[h, a] = P(home=h) * P(away=a)
+
+    draw = float(np.trace(grid))             # h == a
+    home_win = float(np.tril(grid, -1).sum())  # h > a  (below the diagonal)
+    away_win = float(np.triu(grid, 1).sum())   # h < a  (above the diagonal)
+
+    # Renormalised because the grid is truncated at max_goals, so it sums to
+    # slightly under 1.
     total = home_win + draw + away_win
     return round(home_win / total, 3), round(draw / total, 3), round(away_win / total, 3)
 
@@ -543,9 +608,8 @@ def predict(feature_dict: dict) -> dict:
     # Extended stat predictions
     predicted_stats = {}
     for target in STAT_TARGETS:
-        path = _model_path(target)
-        if os.path.exists(path):
-            model = joblib.load(path)
+        model = _load_cached(target)
+        if model is not None:
             val = max(float(model.predict(X)[0]), 0.0)
             predicted_stats[target] = int(round(val))
         else:

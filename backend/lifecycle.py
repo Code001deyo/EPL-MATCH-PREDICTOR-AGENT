@@ -102,6 +102,13 @@ def refresh_live_data():
     finally:
         db.close()
 
+    # Reconciliation attaches statistics to rows that already exist, so the row
+    # count, max id and max date are all unchanged — the cache signature would not
+    # notice. Clearing explicitly is the reason enrichment cannot serve stale
+    # features to the next prediction.
+    from data.features import invalidate_match_cache
+    invalidate_match_cache()
+
     _set(last_refreshed=_now())
     return result
 
