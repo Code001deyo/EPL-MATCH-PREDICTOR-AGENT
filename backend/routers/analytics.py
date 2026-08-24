@@ -1,24 +1,24 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from routers.outcomes import result_letter as _result
 from db.database import get_db, MatchResult, Prediction
 import json
 
 router = APIRouter(prefix="/analytics")
 
-CURRENT_SEASON = "2025-26"
+from data.ingestion import _current_season_label
 
 
-def _result(hg, ag):
-    if hg > ag:
-        return "H"
-    if hg == ag:
-        return "D"
-    return "A"
+def _current():
+    return _current_season_label()
 
 
 @router.get("/league")
-def league_analytics(season: str = CURRENT_SEASON, db: Session = Depends(get_db)):
+def league_analytics(season: str = None, db: Session = Depends(get_db)):
+    # Resolved per request rather than baked into the signature, so the default
+    # follows the calendar instead of whichever season was current at deploy time.
+    season = season or _current()
     rows = db.query(MatchResult).filter(MatchResult.season == season).all()
     if not rows:
         return {"error": "No data for season"}
@@ -172,47 +172,7 @@ def team_form(team: str, db: Session = Depends(get_db)):
     }
 
 
-@router.get("/model/performance")
-def model_performance(db: Session = Depends(get_db)):
-    preds = db.query(Prediction).order_by(Prediction.created_at).all()
-    total = len(preds)
-    evaluated = [p for p in preds if p.actual_home is not None]
-
-    exact = sum(1 for p in evaluated if p.predicted_home == p.actual_home and p.predicted_away == p.actual_away)
-    correct_result = sum(1 for p in evaluated if _result(p.predicted_home, p.predicted_away) == _result(p.actual_home, p.actual_away))
-    wrong = len(evaluated) - correct_result
-
-    # Group by month
-    from collections import defaultdict
-    by_month = defaultdict(lambda: {"total": 0, "exact": 0, "correct_result": 0})
-    for p in evaluated:
-        month = (p.created_at or "")[:7]
-        by_month[month]["total"] += 1
-        if p.predicted_home == p.actual_home and p.predicted_away == p.actual_away:
-            by_month[month]["exact"] += 1
-        if _result(p.predicted_home, p.predicted_away) == _result(p.actual_home, p.actual_away):
-            by_month[month]["correct_result"] += 1
-
-    monthly = [
-        {
-            "month": m,
-            "total": v["total"],
-            "exact_score_pct": round(v["exact"] / v["total"], 3) if v["total"] else 0,
-            "correct_result_pct": round(v["correct_result"] / v["total"], 3) if v["total"] else 0,
-        }
-        for m, v in sorted(by_month.items())
-    ]
-
-    avg_conf = round(sum(p.confidence or 0 for p in preds) / total, 3) if total else 0
-
-    return {
-        "total_predictions": total,
-        "evaluated": len(evaluated),
-        "exact_score_count": exact,
-        "correct_result_count": correct_result,
-        "wrong_count": wrong,
-        "exact_score_accuracy": round(exact / max(len(evaluated), 1), 3),
-        "correct_result_accuracy": round(correct_result / max(len(evaluated), 1), 3),
-        "avg_confidence": avg_conf,
-        "by_month": monthly,
-    }
+# Model-performance reporting (live-settled vs backtested figures, kept
+# separate per the P10 brief) lives in routers/analytics_model.py — split out
+# to keep this file under the project's ~200-line convention. Registered
+# alongside this router in main.py.

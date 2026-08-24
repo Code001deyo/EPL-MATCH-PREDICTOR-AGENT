@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pandas as pd
 import numpy as np
 import requests
@@ -17,8 +19,19 @@ PL_HEADERS = {
     "User-Agent": "Mozilla/5.0",
 }
 
-# Official season IDs from the PulseLive API
-SEASON_IDS = {
+# Premier League competition id in the PulseLive API
+PL_COMPETITION_ID = 1
+
+# Earliest season we train on. Seasons before this are ignored even if the API
+# offers them (the API goes back to 1992-93, which is not useful training data).
+EARLIEST_SEASON = "2019-20"
+
+# 20 clubs x 38 rounds. Used to tell a completed season from a half-seeded one.
+COMPLETE_SEASON_FIXTURES = 380
+
+# Last-resort season IDs, used only when the compseasons endpoint is unreachable.
+# Never add new seasons here — discovery is dynamic, see get_season_ids().
+FALLBACK_SEASON_IDS = {
     "2019-20": 274,
     "2020-21": 363,
     "2021-22": 418,
@@ -27,6 +40,52 @@ SEASON_IDS = {
     "2024-25": 719,
     "2025-26": 777,
 }
+
+_SEASON_ID_CACHE: dict | None = None
+
+
+def _normalise_season_label(label: str) -> str | None:
+    """Normalise an API season label to our canonical 'YYYY-YY' form.
+
+    The API is inconsistent: older seasons come back as '2025/26' while the
+    newest one arrives as 'English Premier League Season 2026/2027'.
+    """
+    import re
+    m = re.search(r"(\d{4})/(\d{2,4})", label or "")
+    if not m:
+        return None
+    start = m.group(1)
+    return f"{start}-{m.group(2)[-2:]}"
+
+
+def get_season_ids(force_refresh: bool = False) -> dict:
+    """Discover EPL season -> compSeason id from the API.
+
+    Season rollover (and promotion/relegation with it) needs no code change:
+    a new season appears here as soon as the Premier League publishes it.
+    """
+    global _SEASON_ID_CACHE
+    if _SEASON_ID_CACHE is not None and not force_refresh:
+        return _SEASON_ID_CACHE
+
+    url = f"{PL_API_BASE}/competitions/{PL_COMPETITION_ID}/compseasons?pageSize=100"
+    try:
+        resp = requests.get(url, headers=PL_HEADERS, timeout=30)
+        resp.raise_for_status()
+        discovered = {}
+        for s in resp.json().get("content", []):
+            label = _normalise_season_label(s.get("label", ""))
+            if label and label >= EARLIEST_SEASON:
+                discovered[label] = int(s["id"])
+        if not discovered:
+            raise ValueError("compseasons returned no usable seasons")
+        _SEASON_ID_CACHE = dict(sorted(discovered.items()))
+        print(f"Discovered {len(_SEASON_ID_CACHE)} seasons: {list(_SEASON_ID_CACHE)}")
+    except Exception as e:
+        print(f"Season discovery failed ({e}); falling back to pinned season ids.")
+        _SEASON_ID_CACHE = dict(FALLBACK_SEASON_IDS)
+
+    return _SEASON_ID_CACHE
 
 # Fixture statuses: C=completed, A=active/live, U=upcoming
 PLAYED_STATUSES = {"C", "A"}
@@ -75,12 +134,14 @@ def _parse_fixture(f: dict, season_label: str) -> dict | None:
         status = f.get("status", "")
         gameweek = int(f["gameweek"]["gameweek"])
 
-        # Kickoff timestamp → date string DD/MM/YYYY
+        # Kickoff timestamp → ISO 'YYYY-MM-DD'.
+        # ISO is required, not cosmetic: rolling windows compare this column as a
+        # string, and only ISO makes that comparison chronological.
         kickoff_millis = f.get("kickoff", {}).get("millis")
         if kickoff_millis:
             from datetime import datetime, timezone
             dt = datetime.fromtimestamp(kickoff_millis / 1000, tz=timezone.utc)
-            date_str = dt.strftime("%d/%m/%Y")
+            date_str = dt.strftime("%Y-%m-%d")
         else:
             date_str = ""
 
@@ -124,6 +185,16 @@ def _is_matchweek_corrupted(db) -> bool:
     return result is not None and result > 38
 
 
+def _is_date_format_legacy(db) -> bool:
+    """True if any row still holds a pre-P1 'DD/MM/YYYY' date.
+
+    Those rows cannot be reinterpreted in place — a lexical sort over mixed
+    formats is meaningless — so their presence forces a full reseed.
+    """
+    row = db.query(MatchResult.date).filter(MatchResult.date.like("%/%")).first()
+    return row is not None
+
+
 def seed_database():
     init_db()
     db = SessionLocal()
@@ -134,20 +205,56 @@ def seed_database():
         db.query(MatchResult).delete()
         db.commit()
 
-    existing_seasons = {r[0] for r in db.query(MatchResult.season).distinct().all()}
-    missing = [s for s in SEASON_IDS if s not in existing_seasons]
+    # P1: legacy DD/MM/YYYY rows sort by day-of-month, so every rolling window
+    # built over them is wrong. Reseed rather than attempt an in-place rewrite.
+    if _is_date_format_legacy(db):
+        print("Legacy DD/MM/YYYY dates detected. Wiping and re-seeding in ISO format...")
+        db.query(MatchResult).delete()
+        db.commit()
+
+    season_ids = get_season_ids()
+
+    # A season counted as "present" if it had a single row, so a run interrupted
+    # part-way left that season permanently short — it was never reconsidered.
+    # Compare against the real fixture count instead. The in-progress season is
+    # exempt because it is legitimately short; refresh_current_season owns it.
+    from sqlalchemy import func
+    counts = dict(
+        db.query(MatchResult.season, func.count(MatchResult.id))
+        .filter(MatchResult.division == "E0")
+        .group_by(MatchResult.season)
+        .all()
+    )
+    current = _current_season_label()
+
+    missing, partial = [], []
+    for season in season_ids:
+        stored = counts.get(season, 0)
+        if stored == 0:
+            missing.append(season)
+        elif season != current and stored < COMPLETE_SEASON_FIXTURES:
+            partial.append(season)
+
+    if partial:
+        print(f"Incomplete seasons detected {[(s, counts[s]) for s in partial]}; re-fetching.")
+        for season in partial:
+            db.query(MatchResult).filter(
+                MatchResult.season == season, MatchResult.division == "E0"
+            ).delete()
+        db.commit()
+        missing.extend(partial)
 
     if not missing:
         total = db.query(MatchResult).count()
-        print(f"Database up to date: {total} records across {len(existing_seasons)} seasons.")
+        print(f"Database up to date: {total} records across {len(counts)} seasons.")
         db.close()
         return
 
-    print(f"Seeding missing seasons: {missing}")
+    print(f"Seeding seasons: {missing}")
 
     all_frames = []
     for season in missing:
-        season_id = SEASON_IDS[season]
+        season_id = season_ids[season]
         print(f"Fetching {season} (id={season_id}) from Premier League API...")
         try:
             df = load_season_from_api(season, season_id)
@@ -173,12 +280,11 @@ def seed_database():
             away_team=row.away_team,
             home_goals=int(row.home_goals),
             away_goals=int(row.away_goals),
-            home_xg=None,
-            away_xg=None,
-            home_shots_ot=None,
-            away_shots_ot=None,
-            home_possession=None,
-            away_possession=None,
+            division="E0",
+            stats_source="pulselive",
+            # Statistics stay NULL here by design: PulseLive does not publish
+            # them. data/reconcile.py attaches the real values from
+            # football-data.co.uk. Never fill these with a derived default.
         )
         for row in combined.itertuples()
     ]
@@ -187,28 +293,54 @@ def seed_database():
     print(f"\nSeeded {len(records)} played matches into database.")
 
     # Validate
-    from sqlalchemy import func
     for season in missing:
         max_mw = db.query(func.max(MatchResult.matchweek)).filter(
             MatchResult.season == season
         ).scalar()
         total_fx = db.query(MatchResult).filter(MatchResult.season == season).count()
-        status = "✓" if max_mw and max_mw <= 38 else "✗ STILL BROKEN"
+        status = "OK" if max_mw and max_mw <= 38 else "STILL BROKEN"
         print(f"  {season}: {total_fx} fixtures, max matchweek = {max_mw} {status}")
 
     db.close()
 
 
+def _current_season_label() -> str:
+    """Return the current EPL season label (e.g. '2025-26') based on today's date."""
+    from datetime import date
+    today = date.today()
+    if today.month >= 8:
+        return f"{today.year}-{str(today.year + 1)[-2:]}"
+    else:
+        return f"{today.year - 1}-{str(today.year)[-2:]}"
+
+
+def current_season_id():
+    """PulseLive id for the current season, or None if it is not published yet.
+
+    Canonical home for this lookup. It previously lived in routers/teams.py,
+    which meant main.py's API health probe had no shared helper to call and
+    hardcoded a season id instead.
+    """
+    return get_season_ids().get(_current_season_label())
+
+
 def refresh_current_season():
     """Re-fetch the current season to pick up newly played fixtures."""
     from db.database import SessionLocal, MatchResult
-    CURRENT = "2025-26"
+    CURRENT = _current_season_label()
+    season_ids = get_season_ids(force_refresh=True)
+    season_id = season_ids.get(CURRENT)
+    if season_id is None:
+        # Pre-season: the new campaign may not be published yet. Skip rather
+        # than crash startup — the next refresh picks it up.
+        print(f"Season {CURRENT} not published by the API yet; skipping refresh.")
+        return
+
     db = SessionLocal()
-    print(f"Refreshing {CURRENT}...")
+    print(f"Refreshing {CURRENT} (id={season_id})...")
     db.query(MatchResult).filter(MatchResult.season == CURRENT).delete()
     db.commit()
 
-    season_id = SEASON_IDS[CURRENT]
     df = load_season_from_api(CURRENT, season_id)
     played = df[df["home_goals"].notna() & df["away_goals"].notna()].copy()
 
@@ -221,12 +353,15 @@ def refresh_current_season():
             away_team=row.away_team,
             home_goals=int(row.home_goals),
             away_goals=int(row.away_goals),
-            home_xg=None,
-            away_xg=None,
-            home_shots_ot=None,
-            away_shots_ot=None,
-            home_possession=None,
-            away_possession=None,
+            # These were previously omitted, so every refresh silently downgraded
+            # the season's rows to division=NULL / stats_source=NULL and dropped
+            # them out of coverage reporting.
+            division="E0",
+            stats_source="pulselive",
+            # Statistics stay NULL: PulseLive does not publish them. This delete-
+            # and-reinsert therefore *removes* the football-data.co.uk values that
+            # reconciliation attached, which is why callers must go through
+            # lifecycle.refresh_live_data() — it re-enriches straight afterwards.
         )
         for row in played.itertuples()
     ]
