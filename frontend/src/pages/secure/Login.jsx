@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
 import Card from "../../components/ui/Card";
 import EmptyState from "../../components/ui/EmptyState";
 import useAuth from "../../hooks/useAuth";
@@ -11,11 +10,11 @@ export default function AdminLogin() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
-
+  // No navigation on success. SecureModel renders the console once the session
+  // is established, so the operator URL never enters browser history as a
+  // separate entry and there is no second path to discover.
   if (loading) return <EmptyState kind="loading" title="Checking your session…" />;
-  if (admin) { navigate(location.state?.from || "/admin", { replace: true }); return null; }
+  if (admin) return null;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -23,7 +22,6 @@ export default function AdminLogin() {
     setError(null);
     try {
       await login(username, password);
-      navigate(location.state?.from || "/admin", { replace: true });
     } catch (err) {
       const status = err?.response?.status;
       // 429 is a distinct, actionable state — telling someone "incorrect
@@ -42,9 +40,9 @@ export default function AdminLogin() {
 
   return (
     <div style={{ maxWidth: 380, margin: "8vh auto 0" }}>
-      <div style={{ ...type.page, color: C.navy, marginBottom: 4 }}>Admin sign in</div>
+      <div style={{ ...type.page, color: C.navy, marginBottom: 4 }}>Sign in</div>
       <div style={{ ...type.body, color: C.slate500, marginBottom: space.lg }}>
-        Model training and data refresh. Everything else on this site is public.
+        Model operations.
       </div>
 
       <Card>

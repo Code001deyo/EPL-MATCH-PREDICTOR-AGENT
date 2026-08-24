@@ -14,6 +14,10 @@ COPY . .
 # by nginx; override at build time to point a dev build at a backend directly.
 ARG REACT_APP_API_BASE=/api
 ENV REACT_APP_API_BASE=$REACT_APP_API_BASE
+# Source maps ship the entire readable source tree — file names, comments and all
+# — to every visitor. That is a needless disclosure on a public deployment, and it
+# is how a directory name alone can reveal that an operator area exists.
+ENV GENERATE_SOURCEMAP=false
 RUN npm run build
 
 FROM nginx:alpine

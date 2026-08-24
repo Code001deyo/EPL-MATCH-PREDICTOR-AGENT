@@ -55,8 +55,7 @@ export default function ModelPage() {
       <div style={{ marginBottom: space.xl }}>
         <div style={{ ...type.page, color: C.navy }}>Model Performance</div>
         <div style={{ fontSize: 13, color: C.slate400, marginTop: 2 }}>
-          Backtested accuracy and live-settled accuracy, reported separately.
-          {" "}Training is an operator action and lives in the admin area.
+          Backtested accuracy and live-settled accuracy, reported separately
         </div>
       </div>
 

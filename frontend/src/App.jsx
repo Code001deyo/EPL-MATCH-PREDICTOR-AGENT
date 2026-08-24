@@ -2,6 +2,7 @@ import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import "@fontsource/inter/700.css";
+import { lazy, Suspense } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./pages/Dashboard";
@@ -10,22 +11,24 @@ import Analytics from "./pages/Analytics";
 import Teams from "./pages/Teams";
 import History from "./pages/History";
 import ModelPage from "./pages/ModelPage";
-import AdminLogin from "./pages/admin/Login";
-import AdminHome from "./pages/admin/AdminHome";
-import RequireAdmin from "./components/RequireAdmin";
-import { AuthProvider } from "./hooks/useAuth";
+/* Code-split, so the sign-in form, the operator console and the calls they make
+ * are in a chunk the public site never downloads. A visitor to the dashboard
+ * fetches none of it.
+ *
+ * Being straight about the limit: this reduces what is *visible*, it does not make
+ * the path secret. The route string is still in the main bundle, because a
+ * client-rendered app has to know its own routes — anyone reading the minified JS
+ * can find it. That is fine, and it is why the path was never the protection:
+ * `require_admin` on the server is, and it holds for a caller who knows the URL
+ * exactly as well as for one who does not. */
+const SecureModel = lazy(() => import("./pages/secure/SecureModel"));
 import { C, SIDEBAR_W } from "./theme";
 import { useIsNarrow } from "./hooks/useBreakpoint";
 
 export default function App() {
   return (
     <Router>
-      {/* Inside the Router so the guard can redirect, and outside Shell so the
-          sidebar and the pages read one shared session rather than each asking
-          the server independently. */}
-      <AuthProvider>
-        <Shell />
-      </AuthProvider>
+      <Shell />
     </Router>
   );
 }
@@ -53,10 +56,13 @@ function Shell() {
             <Route path="/history"   element={<History />} />
             <Route path="/model"     element={<ModelPage />} />
 
-            {/* Admin. The guard is convenience — every one of these endpoints is
-                enforced server-side, so a hand-typed URL gains nothing. */}
-            <Route path="/admin/login" element={<AdminLogin />} />
-            <Route path="/admin"       element={<RequireAdmin><AdminHome /></RequireAdmin>} />
+            {/* Operator route. Unlinked from anywhere in the app and reachable
+                only by typing it. The path is not the protection — every endpoint
+                behind it is enforced server-side — it just keeps the operator
+                area unadvertised to people browsing the public site. */}
+            <Route path="/secure-model" element={
+              <Suspense fallback={null}><SecureModel /></Suspense>
+            } />
           </Routes>
         </main>
       </div>

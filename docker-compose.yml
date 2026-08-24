@@ -34,6 +34,9 @@ services:
       - ADMIN_API_KEY=${ADMIN_API_KEY:-}
       # Local dev is plain http, so the session cookie cannot be Secure-only here.
       - COOKIE_SECURE=${COOKIE_SECURE:-1}
+      # Interactive API docs. On locally, off in production, where the schema
+      # would otherwise advertise the operator endpoints to anyone.
+      - ENABLE_DOCS=${ENABLE_DOCS:-1}
     networks:
       - eplnet
     restart: unless-stopped

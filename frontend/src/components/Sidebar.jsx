@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import useAuth from "../hooks/useAuth";
 import { NavLink, useLocation } from "react-router-dom";
 import { C, SIDEBAR_W, space, type } from "../theme";
 import { useIsNarrow } from "../hooks/useBreakpoint";
@@ -76,7 +75,6 @@ export default function Sidebar() {
             </NavLink>
           ))}
         </nav>
-        <AdminLink />
         <div style={{ padding: "16px 20px", borderTop: `1px solid ${C.navyLight}`, ...type.micro, fontWeight: 400, color: C.slate500 }}>
           <div>Data: Premier League API</div>
           {/* rel="noopener noreferrer" is not boilerplate here: target="_blank"
@@ -98,28 +96,5 @@ export default function Sidebar() {
         </div>
       </aside>
     </>
-  );
-}
-
-
-/* Shown only to a signed-in admin.
- *
- * This is presentation, not access control — /admin is guarded by RequireAdmin
- * and, more to the point, every admin endpoint is enforced on the server. Hiding
- * the link keeps the public nav uncluttered; it is not what stops anyone getting in.
- */
-function AdminLink() {
-  const { admin } = useAuth();
-  if (!admin) return null;
-  return (
-    <NavLink to="/admin" style={({ isActive }) => ({
-      display: "block", margin: "0 10px 8px", padding: "9px 14px", borderRadius: 8,
-      textDecoration: "none", fontSize: 13, fontWeight: 600,
-      color: isActive ? C.navy : C.blue,
-      background: isActive ? C.blue : "transparent",
-      border: `1px solid ${C.blue}`,
-    })}>
-      Admin
-    </NavLink>
   );
 }

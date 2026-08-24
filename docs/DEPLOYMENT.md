@@ -81,10 +81,30 @@ scripts directory that is not on PATH - it prints a warning about this that is e
 to miss. The deploy script looks there itself, including the Windows
 `%APPDATA%\Python\PythonXY\Scripts` form converted with `cygpath` for Git Bash.
 
-## Admin access
+## Operator access
 
 The public site is predictions plus the read-only views. Anything that can change
-the model or the data — retrain, backtest, data refresh — requires an admin.
+the model or the data — retrain, backtest, data refresh — requires an operator.
+
+**The operator area is at `/secure-model` and is linked from nowhere.** There is no
+navigation entry, the public pages make no authentication requests at all, and the
+sign-in form and console are code-split into a chunk the public site never
+downloads. `/docs`, `/redoc` and `/openapi.json` are disabled unless `ENABLE_DOCS`
+is set, because the schema would otherwise list every operator route to anyone who
+asked. Source maps are not built, so the source tree is not readable from the
+deployed bundle.
+
+**What that does and does not buy you.** It stops the operator area being *found*
+by someone browsing the site or reading the API schema. It does not make the URL
+secret: a client-rendered app has to know its own routes, so the path is still
+present in the main JavaScript bundle and anyone who reads it can find `/secure-model`.
+That is acceptable precisely because the path was never the protection —
+`require_admin` on the server is, and it holds identically for a caller who knows
+the URL and one who does not. Do not treat the path as a credential.
+
+Sign-in and the console share one route: signed out you get the form, signed in you
+get the console, and the address bar never changes. A separate `/…/login` would be
+a second discoverable path for no benefit.
 
 Credentials live in **environment variables, not the database**: the free instance
 has no persistent disk, so an accounts table would reset to the baked snapshot on
@@ -104,6 +124,7 @@ python scripts/make-admin-hash.py
 | `SESSION_SECRET` | signs the session cookie |
 | `ADMIN_API_KEY` | lets the scheduled refresh authenticate without a cookie |
 | `ALLOWED_ORIGINS` | comma-separated; defaults to localhost + the Vercel origin |
+| `ENABLE_DOCS` | set to `1` only where you want `/docs` exposed; leave unset in production |
 
 `ADMIN_API_KEY` also goes in GitHub → Settings → Secrets → Actions, and the API
 base URL in Settings → Variables as `API_BASE_URL`, so the refresh workflow can run.

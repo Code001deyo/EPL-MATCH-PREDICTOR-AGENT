@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, createContext, useContext } from "react";
+import { useState, useCallback, createContext, useContext } from "react";
 import axios from "axios";
 import { API } from "../config";
 
-/* Who is signed in, shared across the app.
+/* Who is signed in.
  *
  * The session is an httpOnly cookie, so this deliberately CANNOT read the token —
  * that is the point of httpOnly, and it is why the token does not live in
@@ -20,7 +20,10 @@ const AuthContext = createContext(null);
 axios.defaults.withCredentials = true;
 
 export function AuthProvider({ children }) {
-  const [state, setState] = useState({ admin: false, username: null, configured: true, loading: true });
+  // Starts signed-out and NOT loading, because the public site never asks. The
+  // session is only probed once something actually needs to know — which today is
+  // the operator route alone.
+  const [state, setState] = useState({ admin: false, username: null, configured: true, loading: false });
 
   const refresh = useCallback(async () => {
     try {
@@ -35,7 +38,17 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  // Deliberately NOT called on mount.
+  //
+  // Probing /auth/me on every page load would put an authentication request in
+  // the network tab of every anonymous visitor — which tells anyone looking that
+  // this app has an operator area, however well hidden its URL is. Only the
+  // operator route calls `probe()`, so the public site emits no auth traffic at
+  // all.
+  const probe = useCallback(async () => {
+    setState((s) => ({ ...s, loading: true }));
+    return refresh();
+  }, [refresh]);
 
   const login = useCallback(async (username, password) => {
     await axios.post(`${API}/auth/login`, { username, password });
@@ -47,7 +60,7 @@ export function AuthProvider({ children }) {
   }, [refresh]);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, refresh }}>
+    <AuthContext.Provider value={{ ...state, login, logout, refresh, probe }}>
       {children}
     </AuthContext.Provider>
   );

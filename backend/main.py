@@ -9,7 +9,23 @@ from data.ingestion import get_season_ids, current_season_id, _current_season_la
 import lifecycle
 from routers import predict, teams, results, analytics, analytics_model, auth_router, model as model_router
 
-app = FastAPI(title="EPL Score Predictor", version="1.0.0")
+# The interactive docs enumerate every route, so on a public deployment they
+# advertise /auth/login, /model/retrain and /data/refresh to anyone who asks —
+# which defeats keeping the operator surface unadvertised. They stay available for
+# local development, where discovering the API is the point.
+#
+# This is not what protects those endpoints: require_admin is, and it holds
+# whether or not a caller knows the path. Turning the schema off removes the
+# signpost, not the lock.
+_docs_enabled = os.environ.get("ENABLE_DOCS", "").lower() in ("1", "true", "yes")
+
+app = FastAPI(
+    title="EPL Score Predictor",
+    version="1.0.0",
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
+)
 
 # Narrowed from ["*"]. The browser reaches this API same-origin through the
 # frontend's /api rewrite, so a permissive policy bought nothing and let any site

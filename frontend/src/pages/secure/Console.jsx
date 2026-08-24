@@ -18,14 +18,14 @@ import { API } from "../../config";
  * The public Model page keeps the metrics, calibration and baselines — those are
  * the numbers that let a visitor judge the model, and hiding them would make the
  * app less honest, not more secure. */
-export default function AdminHome() {
+export default function Console() {
   const { username, logout } = useAuth();
 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: space.sm, marginBottom: space.lg }}>
         <div>
-          <div style={{ ...type.page, color: C.navy }}>Admin</div>
+          <div style={{ ...type.page, color: C.navy }}>Model operations</div>
           <div style={{ ...type.body, color: C.slate500 }}>
             Signed in as <strong>{username}</strong>
           </div>
