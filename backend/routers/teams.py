@@ -1,12 +1,19 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from db.database import get_db, MatchResult
+from db.teams import top_flight_teams
 import requests
 
 router = APIRouter()
 
-CURRENT_SEASON = "2025-26"
-CURRENT_SEASON_ID = 777
+# Season membership is discovered, never pinned. The previous constants
+# (2025-26 / id 777) silently froze the app to last season, so /fixtures/upcoming
+# queried a completed campaign and always returned nothing.
+from data.ingestion import _current_season_label, current_season_id  # noqa: F401
+
+
+def current_season() -> str:
+    return _current_season_label()
 PL_API_BASE = "https://footballapi.pulselive.com/football"
 PL_HEADERS = {
     "Origin": "https://www.premierleague.com",
@@ -17,16 +24,20 @@ PL_HEADERS = {
 
 @router.get("/teams")
 def get_teams(db: Session = Depends(get_db)):
-    rows = db.query(MatchResult.home_team).distinct().all()
-    teams = sorted({r[0] for r in rows})
-    return {"teams": teams}
+    """Selectable clubs — top flight only.
+
+    This used to be a bare `distinct()` over `home_team` with no division filter,
+    so it handed the UI 47 clubs including Championship sides that promoted.py
+    stores purely as feature history. See db/teams.py.
+    """
+    return {"teams": top_flight_teams(db)}
 
 
 @router.get("/seasons")
 def get_seasons(db: Session = Depends(get_db)):
     rows = db.query(MatchResult.season).distinct().order_by(MatchResult.season).all()
     return {"seasons": [
-        {"id": r[0], "label": f"{r[0]} ⏳ In Progress" if r[0] == CURRENT_SEASON else r[0]}
+        {"id": r[0], "label": f"{r[0]} ⏳ In Progress" if r[0] == current_season() else r[0]}
         for r in rows
     ]}
 
@@ -79,7 +90,7 @@ def upcoming_fixtures():
         while True:
             url = (
                 f"{PL_API_BASE}/fixtures"
-                f"?compSeasons={CURRENT_SEASON_ID}&statuses=U&sort=asc"
+                f"?compSeasons={current_season_id()}&statuses=U&sort=asc"
                 f"&pageSize={page_size}&page={page}"
             )
             resp = requests.get(url, headers=PL_HEADERS, timeout=15)
@@ -112,22 +123,39 @@ def upcoming_fixtures():
             except Exception:
                 continue
 
-        return {"season": CURRENT_SEASON, "upcoming_count": len(fixtures), "fixtures": fixtures}
+        return {"season": current_season(), "upcoming_count": len(fixtures), "fixtures": fixtures}
     except Exception as e:
         return {"error": str(e), "fixtures": []}
 
 
 @router.get("/fixtures/current")
 def current_season_fixtures(db: Session = Depends(get_db)):
-    return fixtures_by_season(CURRENT_SEASON, db)
+    return fixtures_by_season(current_season(), db)
 
 
 @router.post("/data/refresh")
 def refresh_data():
-    """Re-fetch the current season from the PL API to pick up newly played fixtures."""
-    from data.ingestion import refresh_current_season
-    count = refresh_current_season()
-    return {"status": "refreshed", "played_fixtures": count, "season": CURRENT_SEASON}
+    """Refresh the in-progress season: re-fetch, re-attach statistics, settle.
+
+    This used to call refresh_current_season() alone. That deletes the season's
+    rows and re-inserts them from PulseLive, which carries goals but no shot
+    data — so every call quietly destroyed the football-data.co.uk statistics
+    and reported {"status": "refreshed"} while degrading the data. The three
+    steps are now one unit in lifecycle.refresh_live_data().
+    """
+    import lifecycle
+    result = lifecycle.refresh_live_data()
+    unpublished = result["played_fixtures"] is None
+    return {
+        # Do not claim "refreshed" when the season is not published yet: the old
+        # response said refreshed with played_fixtures=null.
+        "status": "season-not-published" if unpublished else "refreshed",
+        "played_fixtures": result["played_fixtures"],
+        "statistics_attached": result["enriched"],
+        "predictions_settled": result["settled"],
+        "season": result["season"],
+        "last_refreshed": lifecycle.last_refreshed(),
+    }
 
 
 @router.get("/team/{team_name}/stats")

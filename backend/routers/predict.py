@@ -6,7 +6,9 @@ from typing import Optional
 import json
 
 from db.database import get_db, Prediction, MatchResult
+from db.teams import is_top_flight
 from data.features import load_matches, build_feature_vector
+from data.ingestion import _current_season_label
 from models.ml_model import predict, get_feature_importance
 
 router = APIRouter()
@@ -38,13 +40,30 @@ def predict_fixture(req: PredictRequest, db: Session = Depends(get_db)):
         home_team = req.home_team
         away_team = req.away_team
         matchweek = req.matchweek or 1
-        season = req.season or "2025-26"
+        season = req.season or _current_season_label()
         predict_date = str(date.today())
     else:
         raise HTTPException(status_code=400, detail="Provide either fixture_id or both home_team and away_team.")
 
     if home_team == away_team:
         raise HTTPException(status_code=400, detail="Home and away team cannot be the same.")
+
+    # Reject fixtures that cannot exist. `match_results` holds Championship rows
+    # for promoted clubs (see db/teams.py), and until /teams was filtered the UI
+    # offered them: the predictions table still contains "Arsenal vs Coventry".
+    # Refusing here is the honest answer — the model is trained on top-flight
+    # matches only, so a prediction for a second-tier club is a number the data
+    # does not support, not a harmless extra feature.
+    for side, name in (("home", home_team), ("away", away_team)):
+        if not is_top_flight(db, name):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"{name} has no Premier League matches in the stored history, so it "
+                    f"cannot be the {side} side of a prediction. The model is trained on "
+                    f"top-flight fixtures only."
+                ),
+            )
 
     df = load_matches(db)
     if df.empty:
@@ -113,4 +132,22 @@ def predict_fixture(req: PredictRequest, db: Session = Depends(get_db)):
         "predicted_stats": result.get("predicted_stats", {}),
         "actual_score": actual_score,
         "prediction_id": record.id,
+        # What this prediction actually rests on. A newly promoted club has no
+        # Premier League record, so its forecast comes from adjusted Championship
+        # form — the interface says so rather than presenting both alike.
+        "home_team": home_team,
+        "away_team": away_team,
+        "evidence": {
+            "home_top_flight_matches": _as_int(features.get("home_top_flight_matches")),
+            "away_top_flight_matches": _as_int(features.get("away_top_flight_matches")),
+            "home_is_newly_promoted": bool(features.get("home_is_newly_promoted")),
+            "away_is_newly_promoted": bool(features.get("away_is_newly_promoted")),
+        },
     }
+
+
+def _as_int(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
