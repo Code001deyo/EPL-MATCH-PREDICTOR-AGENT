@@ -1,0 +1,46 @@
+# Render Blueprint — the backend deploys from this file.
+#
+# Chosen after measuring, not assuming: a full retrain peaks at 237 MiB RSS, so
+# the free instance's 512 MB is genuinely sufficient. An earlier round of this
+# project rejected Render on the guess that XGBoost would exhaust that budget;
+# the guess was wrong. The feature matrix is 2,669 x 55 — the retrain is slow
+# because of Python loop overhead, not because it is memory-hungry.
+#
+# Connect once at https://dashboard.render.com/blueprints -> New Blueprint, pick
+# this repo. After that every push to main redeploys automatically, the same way
+# Vercel handles the frontend.
+services:
+  - type: web
+    name: epl-predictor-api
+    runtime: docker
+    plan: free
+    # Only the backend subtree is the build context, so a frontend-only commit
+    # does not rebuild a 1.55 GB image.
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    # Liveness, not readiness. /health answers within a second of boot because
+    # seeding runs on a background thread; /health/ready reports 503 until it
+    # finishes. Pointing Render at /health/ready would make every deploy look
+    # failed for the duration of a cold start.
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Render injects PORT and expects the process to bind it. entrypoint.sh
+      # already runs uvicorn on ${PORT:-8000}, so nothing is hardcoded.
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      # Free instances have no persistent disk, so this path is ephemeral. That
+      # is survivable only because backend/seed/ is baked into the image and
+      # entrypoint.sh restores it when the directory is empty.
+      - key: DATA_DIR
+        value: /app/dbdata
+      - key: MODEL_DIR
+        value: /app/saved_models
+      - key: SEED_DIR
+        value: /app/seed
+      # Background refresh of the in-progress season. On a free instance the
+      # service sleeps after 15 minutes idle, so this loop only advances while
+      # someone is actually using the app — which is the correct trade here, not
+      # a defect to work around.
+      - key: REFRESH_INTERVAL_HOURS
+        value: "6"

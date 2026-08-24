@@ -1,14 +1,17 @@
-name: Deploy backend to Hugging Face Spaces
+name: Deploy backend to Hugging Face Spaces (optional, requires PRO)
 
-# The Space is its own git repo. This workflow stages the backend tree plus the
-# Space's README (which carries the HF config in YAML frontmatter) and pushes it
-# there; HF then builds the image itself.
+# NOT the primary deploy path. Hugging Face requires a PRO subscription to host
+# Docker Spaces — only Static Spaces are free — so `hf repo create` returns
+# 402 Payment Required on a free account. The backend deploys to Render instead,
+# from render.yaml, which Render redeploys on every push without a workflow.
+#
+# This is kept, and kept manual, because it works unchanged on a PRO account and
+# is the better host when available: 2 vCPU / 16 GB and no idle sleep, against
+# Render's free 512 MB and a 15-minute spin-down.
+#
+# Manual trigger only. Left on `push` it would fail on every commit to main and
+# train everyone to ignore a red badge.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "backend/**"
-      - ".github/workflows/deploy-backend.yml"
   workflow_dispatch:
 
 concurrency:
