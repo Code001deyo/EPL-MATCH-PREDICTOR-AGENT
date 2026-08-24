@@ -1,0 +1,138 @@
+name: Retrain and backtest
+
+# Refits the model on the current database and re-runs the walk-forward backtest.
+#
+# This exists because retraining needs an admin credential, and the one place a
+# credential already lives safely is this repository's secrets. Running it here
+# means nobody has to paste a key into a terminal, and the operator gets a
+# repeatable, logged run instead of a one-off curl whose output disappears.
+#
+# Manual only. Retraining on a schedule would silently change what the site
+# predicts without anyone deciding it should change - and the metrics printed at
+# the end are the whole point, so a human should be reading them.
+
+on:
+  workflow_dispatch:
+    inputs:
+      seasons:
+        description: "Seasons to backtest (each one costs a full set of per-matchweek refits)"
+        required: false
+        default: "3"
+      skip_backtest:
+        description: "Retrain only, skip the backtest"
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  # The server is single-flight per job kind anyway - a second retrain joins the
+  # first rather than racing it over the same .pkl files. This just avoids
+  # burning a cold start on a run that would immediately join another.
+  group: retrain-model
+  cancel-in-progress: false
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Check configuration
+        run: |
+          test -n "${{ secrets.ADMIN_API_KEY }}" || { echo "::error::repository secret ADMIN_API_KEY is not set"; exit 1; }
+          test -n "${{ vars.API_BASE_URL }}" || { echo "::error::repository variable API_BASE_URL is not set"; exit 1; }
+
+      - name: Wake the instance
+        env:
+          API: ${{ vars.API_BASE_URL }}
+        run: |
+          for i in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$API/health" || true)
+            [ "$code" = "200" ] && { echo "awake after $((i*10))s"; exit 0; }
+            echo "  attempt $i: HTTP $code"
+            sleep 10
+          done
+          echo "::error::$API/health did not respond within 2 minutes"
+          exit 1
+
+      - name: Retrain
+        env:
+          API: ${{ vars.API_BASE_URL }}
+          KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          curl -sS --fail-with-body --max-time 120 \
+            -X POST "$API/model/retrain" -H "X-Admin-Key: $KEY" -o start.json
+          cat start.json
+          job=$(python -c "import json;print(json.load(open('start.json'))['job_id'])")
+          echo "job=$job" >> "$GITHUB_ENV"
+
+      - name: Wait for the retrain
+        env:
+          API: ${{ vars.API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 120); do
+            curl -sS --fail --max-time 60 "$API/model/jobs/$job" -o job.json
+            state=$(python -c "import json;print(json.load(open('job.json'))['state'])")
+            stage=$(python -c "import json;d=json.load(open('job.json'));print(d.get('stage') or '')")
+            echo "  [$i] $state  $stage"
+            case "$state" in
+              succeeded) exit 0 ;;
+              # A failed job is a failed workflow. Without this the run goes green
+              # having trained nothing, which is the failure mode worth avoiding.
+              failed) echo "::error::retrain failed"; cat job.json; exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "::error::retrain did not finish within 30 minutes"; exit 1
+
+      - name: Backtest
+        if: ${{ inputs.skip_backtest != true }}
+        env:
+          API: ${{ vars.API_BASE_URL }}
+          KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          curl -sS --fail-with-body --max-time 120 \
+            -X POST "$API/model/backtest/run?seasons=${{ inputs.seasons }}" \
+            -H "X-Admin-Key: $KEY" -o bt.json
+          cat bt.json
+          job=$(python -c "import json;print(json.load(open('bt.json'))['job_id'])")
+          for i in $(seq 1 160); do
+            curl -sS --fail --max-time 60 "$API/model/jobs/$job" -o job.json
+            state=$(python -c "import json;print(json.load(open('job.json'))['state'])")
+            stage=$(python -c "import json;d=json.load(open('job.json'));print(d.get('stage') or '')")
+            echo "  [$i] $state  $stage"
+            case "$state" in
+              succeeded) exit 0 ;;
+              failed) echo "::error::backtest failed"; cat job.json; exit 1 ;;
+            esac
+            sleep 20
+          done
+          echo "::error::backtest did not finish in time"; exit 1
+
+      - name: Report the numbers
+        if: always()
+        env:
+          API: ${{ vars.API_BASE_URL }}
+        run: |
+          curl -sS --fail --max-time 120 "$API/model/backtest" -o report.json || exit 0
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          d = json.load(open("report.json"))
+          h = d.get("headline", {})
+          print("## Backtest\n")
+          print(f"Scored **{d.get('matches_scored')}** matches "
+                f"across {', '.join(d.get('seasons_covered', []))}\n")
+          print("| measure | value |")
+          print("| --- | --- |")
+          # RPS first: it is the metric the model is tuned against. Accuracy is
+          # here for a lay reader, and is meaningless without the two baselines
+          # underneath it.
+          print(f"| RPS (lower is better) | {h.get('rps')} |")
+          print(f"| log loss | {h.get('log_loss')} |")
+          print(f"| result accuracy | {h.get('correct_result_pct')}% |")
+          print(f"| exact score | {h.get('exact_score_pct')}% |")
+          print(f"| bookmaker line, same fixtures | {h.get('market_correct_pct')}% |")
+          print(f"| always pick home | {h.get('always_home_pct')}% |")
+          PY
