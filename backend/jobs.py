@@ -58,8 +58,14 @@ def active(kind):
         return None
 
 
-def progress(job_id, stage=None, done=None, total=None):
-    """Called from inside the worker to report where it has got to."""
+def progress(job_id, stage=None, done=None, total=None, unit=None):
+    """Called from inside the worker to report where it has got to.
+
+    `unit` names what `completed`/`total` are counting, because a job counts
+    different things in different phases - fixtures while the feature matrix is
+    built, then estimators while they are fitted. The UI used to label every
+    count "models", which was wrong for every stage but the last one.
+    """
     with _lock:
         job = _jobs.get(job_id)
         if not job:
@@ -70,6 +76,8 @@ def progress(job_id, stage=None, done=None, total=None):
             job["completed"] = done
         if total is not None:
             job["total"] = total
+        if unit is not None:
+            job["unit"] = unit
         job["updated_at"] = _now()
 
 
@@ -106,6 +114,7 @@ def submit(kind, fn):
             "stage": "starting",
             "completed": 0,
             "total": None,
+            "unit": None,
             "started_at": _now(),
             "updated_at": _now(),
             "finished_at": None,

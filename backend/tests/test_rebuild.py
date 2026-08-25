@@ -119,10 +119,15 @@ def test_unknown_team_yields_nan_not_zero():
 
 def test_no_synthetic_constants_remain_in_feature_layer():
     """The specific fabrications that made two thirds of the vector fake."""
-    path = os.path.join(os.path.dirname(__file__), "..", "data", "features.py")
-    source = open(path, encoding="utf-8").read()
-    for literal in ["* 4.5", "* 2.5", "fallback=50.0", "fallback=11.0", "fallback=1.5"]:
-        assert literal not in source, f"synthetic fallback {literal!r} is back in features.py"
+    # Every file the feature layer is spread across, not just features.py: the
+    # per-fixture computation moved to vector.py and the windowing to history.py,
+    # and a guard that only reads one of the three would pass while a fabricated
+    # constant sat in another.
+    layer = os.path.join(os.path.dirname(__file__), "..", "data")
+    for name in ["features.py", "vector.py", "history.py"]:
+        source = open(os.path.join(layer, name), encoding="utf-8").read()
+        for literal in ["* 4.5", "* 2.5", "fallback=50.0", "fallback=11.0", "fallback=1.5"]:
+            assert literal not in source, f"synthetic fallback {literal!r} is back in {name}"
 
 
 def test_ratio_propagates_missingness():

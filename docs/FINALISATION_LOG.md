@@ -587,3 +587,138 @@ excludes E1 and vice versa, NULL divisions count as top-flight, a club present i
 both divisions is counted once per division, an unknown division is rejected rather
 than returning empty, unplayed fixtures are excluded from aggregates, and derived
 Championship rounds fall in blocks of twelve without reordering rows.
+
+---
+
+# Feature-build performance pass — 2026-08-25
+
+## The report
+
+"Training the model in production: over 500 seconds elapsed and training has not
+yet started."
+
+## What was actually happening
+
+Not a hang. `GET /model/jobs` on the deployed instance showed a live retrain:
+
+```
+"state":"running", "stage":"building feature matrix",
+"started_at":"2026-08-25T06:04:42Z", "updated_at":"2026-08-25T06:04:42Z"
+```
+
+`updated_at` equal to `started_at` seventeen minutes in — the job had reported
+progress exactly once, on entry. It did finish: `finished_at` 06:21:46, **17m 04s**,
+of which roughly fifteen minutes preceded the first estimator. The operator was
+reading a truthful stage label that happened to be true for a quarter of an hour.
+
+The cost was in `build_training_matrix`. Every window helper filtered the whole
+match frame with a boolean mask — `df[(df["home_team"] == team) & (df["date"] <
+before)]` — then took `.tail(5)`. A dozen of those per fixture, over 4,570
+Premier League fixtures in an 11,218-row frame, is roughly 55,000 full-frame
+scans plus the pandas object overhead each carries.
+
+Measured locally on the 6,545-match snapshot, before any change:
+
+| | |
+|---|---|
+| `build_training_matrix` | **356.28 s** |
+| top cost under cProfile | `Series.__init__` 93.8s cumulative, `frame.__getitem__` 110.1s, `guess_datetime_format` 20.4s |
+
+`guess_datetime_format` is the tell: `_rest_days` and `_matches_in_window`
+re-parsed the same few thousand date strings tens of thousands of times.
+
+## What changed
+
+**`backend/data/history.py` (new).** The frame is already chronological, so the
+rows a team-scoped helper may see are a *prefix* of that team's rows — a binary
+search, not a scan. `MatchHistory` groups the frame once (per club, per venue,
+per fixture pairing), then serves numpy slices. Windows are capped at ten rows
+because nothing longer can reach an output.
+
+**`backend/data/features.py`.** The helpers now read slices instead of carving
+frames. `TeamIndex` is gone, replaced by `MatchHistory`. `iterrows()` is gone.
+The build reports progress every 250 fixtures.
+
+**`backend/models/backtest.py`.** Each fold predicts its fixtures as one batch;
+it was calling `model.predict()` twice per fixture, paying the fixed per-call
+cost 2,280 times for a three-season run. `_confidence` is handed
+`dict(zip(FEATURE_COLS, X[i]))` instead of a 75-column `Series.to_dict()`.
+
+**`backend/jobs.py`, `routers/model.py`, `RetrainPanel.jsx`.** Jobs now carry a
+`unit`, because one job counts different things as it goes. The panel was
+hardcoded to "models", which was wrong for every stage but the last — and the
+last stage was never the slow one.
+
+## Proof the results did not change
+
+`build_training_matrix` was run under the old implementation and the output
+pickled, then re-run under the new one and compared column by column:
+
+```
+new build_training_matrix: 1.50s  shape (2669, 75)
+old baseline:              356.28s  shape (2669, 75)
+speedup: 237x
+
+All 75 columns identical across 2669 rows.
+```
+
+Identical, not close: exact float equality with NaN treated as equal to NaN.
+`tests/test_feature_index.py` keeps the old boolean-scan implementations as a
+reference and asserts the indexed path matches them for every team at every
+fixture date in a generated season — including the NaN cases, where `_safe_mean`
+skipped missing statistics and a NaN result scored zero points.
+
+## Measured after
+
+On the running container, with the full **4,570-fixture** dataset production has:
+
+| | before | after |
+|---|---|---|
+| feature matrix (production-sized) | ~15 min | **~5 s** |
+| full retrain, end to end | 17m 04s | **57 s** |
+| backtest, 3 seasons | ~23 min | **10m 57s** |
+| feature matrix (local 6,545-match snapshot) | 356.28 s | **1.50 s** |
+
+The backtest's remaining 649 seconds are 228 estimator fits — two per matchweek.
+That is what a walk-forward backtest *is*, not an inefficiency, so it was left
+alone and given per-matchweek progress instead.
+
+Accuracy is unchanged, which is the point:
+
+```
+1,140 matches over 2023-24, 2024-25, 2025-26
+53.6% correct results | RPS 0.1999 | log loss 0.9811
+bookmakers' line on the same fixtures: 54.2% | always-home: 43.2%
+```
+
+## `/data/refresh` — the same defect, one layer along
+
+Refresh was still a blocking POST: two upstream downloads plus reconciliation,
+held open for the whole run. Longer than a browser or the CDN in front of it
+will hold an idle connection, so the operator console reported a failed request
+for work that was still running, and never showed its result.
+
+It is a background job now — `POST /data/refresh` answers **202 in 0.14 s** with
+a job id, `GET /data/jobs/{id}` polls it, `GET /data/refresh` re-attaches after a
+reload. `lifecycle.refresh_live_data()` also took a lock: the HTTP path is
+single-flight through `jobs.submit()`, but that could not see the in-process
+3-hourly timer, and refresh deletes and re-inserts the season's rows — two
+overlapping runs would each read a table the other had half-emptied.
+
+Verified end to end against the running stack:
+
+```
+POST /data/refresh -> 202 in 0.140s
+{"status":"refreshed","played_fixtures":10,"statistics_attached":10,
+ "predictions_settled":0,"season":"2026-27"}
+```
+
+## Tests
+
+**193 pass** in the container (`docker exec epl-predictor-backend-1 python -m
+pytest tests/ -q`), up from 176: `tests/test_feature_index.py` is new (17 tests)
+and `TestTeamIndexPreservesSemantics` became
+`TestMatchHistoryPreservesSemantics`, covering venue orientation, the
+strictly-before cut, the division split and both directions of head-to-head.
+
+Frontend builds clean with `CI=true npm run build`.

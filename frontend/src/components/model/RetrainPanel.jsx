@@ -10,14 +10,20 @@ const POLL_MS = 2000;
 /* Retraining is a background job, not a request.
  *
  * The button used to fire a single blocking POST with no timeout and no
- * progress. Training takes ~4 minutes, which is longer than a browser will
- * hold an idle connection, so a retrain that succeeded on the server was
- * regularly reported to the user as "Retrain failed."
+ * progress. Training ran for minutes — longer than a browser will hold an idle
+ * connection — so a retrain that succeeded on the server was regularly reported
+ * to the user as "Retrain failed."
  *
  * The backend now answers 202 with a job id straight away. This polls it, so
  * the page can be reloaded or left mid-run without losing the job, and a
  * second click joins the run in flight instead of starting a rival that would
- * race it writing the same model files. */
+ * race it writing the same model files.
+ *
+ * The stage label matters more than it looks. Most of a retrain used to be spent
+ * building the feature matrix, which reported one unchanging stage and no count,
+ * so an operator watching "building feature matrix" for fifteen minutes had no
+ * way to tell a working job from a wedged one. That stage now counts fixtures,
+ * and the job says which unit it is counting. */
 export default function RetrainPanel({ onComplete }) {
   const [job, setJob] = useState(null);
   const [error, setError] = useState(null);
@@ -79,6 +85,10 @@ export default function RetrainPanel({ onComplete }) {
   };
 
   const pct = job?.total ? Math.round((job.completed / job.total) * 100) : null;
+  // The job says what it is counting. This used to be hardcoded to "models",
+  // which was wrong for every stage but the last: the feature build counts
+  // fixtures, and it is the stage that takes the longest.
+  const unit = job?.unit || "steps";
 
   return (
     <Card>
@@ -103,7 +113,7 @@ export default function RetrainPanel({ onComplete }) {
 
         {running && (
           <span style={{ ...type.label, color: C.slate500 }}>
-            {job.stage}{pct !== null ? ` · ${job.completed}/${job.total} models` : ""} · {elapsed}s elapsed
+            {job.stage}{pct !== null ? ` · ${job.completed}/${job.total} ${unit}` : ""} · {elapsed}s elapsed
           </span>
         )}
         {job && job.state === "succeeded" && (

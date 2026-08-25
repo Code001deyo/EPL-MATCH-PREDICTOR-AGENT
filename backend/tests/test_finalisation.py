@@ -201,31 +201,81 @@ class TestOutcomeHelpers:
         assert result_letter(h, a) == expected
 
 
-class TestTeamIndexPreservesSemantics:
-    """The per-team index cut the feature build from 273s to ~185s. It must
-    return exactly the rows the helpers would have selected from the full
-    frame, in the same order — the helpers rely on chronological order for
-    .tail(window)."""
+class TestMatchHistoryPreservesSemantics:
+    """The point-in-time index cut the feature build from 356s to 1.5s on the
+    6,545-match snapshot. It must select exactly the rows the boolean-mask
+    helpers selected: the same chronological prefix, the same window off the
+    end, and the same strictly-before cut that the no-leakage rule depends on."""
 
-    def test_index_matches_a_full_frame_scan(self):
-        from data.features import TeamIndex
+    FRAME = pd.DataFrame([
+        {"home_team": "A", "away_team": "B", "date": "2024-01-01",
+         "home_goals": 2, "away_goals": 1, "division": "E0"},
+        {"home_team": "C", "away_team": "A", "date": "2024-01-08",
+         "home_goals": 0, "away_goals": 0, "division": "E0"},
+        {"home_team": "B", "away_team": "C", "date": "2024-01-15",
+         "home_goals": 1, "away_goals": 3, "division": "E1"},
+        {"home_team": "A", "away_team": "C", "date": "2024-01-22",
+         "home_goals": 4, "away_goals": 0, "division": "E0"},
+    ])
 
-        df = pd.DataFrame([
-            {"home_team": "A", "away_team": "B", "date": "2024-01-01"},
-            {"home_team": "C", "away_team": "A", "date": "2024-01-08"},
-            {"home_team": "B", "away_team": "C", "date": "2024-01-15"},
-            {"home_team": "A", "away_team": "C", "date": "2024-01-22"},
-        ])
-        index = TeamIndex(df)
+    def test_window_matches_a_full_frame_scan(self):
+        from data.history import MatchHistory
 
+        df = self.FRAME
+        index = MatchHistory(df)
         for team in ["A", "B", "C"]:
-            expected = df[(df["home_team"] == team) | (df["away_team"] == team)]
-            got = index.team(team)
-            assert list(got.index) == list(expected.index), f"{team}: order changed"
-            assert got.equals(expected)
+            for before in ["2024-01-01", "2024-01-09", "2024-01-23", "2025-01-01"]:
+                expected = df[
+                    ((df["home_team"] == team) | (df["away_team"] == team))
+                    & (df["date"] < before)
+                ]
+                window = index.team_window(team, before)
+                assert window.played == len(expected), (team, before)
 
-    def test_unknown_team_returns_empty_not_error(self):
-        from data.features import TeamIndex
+    def test_goals_are_oriented_by_venue_and_ordered_oldest_first(self):
+        from data.history import MatchHistory
 
-        df = pd.DataFrame([{"home_team": "A", "away_team": "B", "date": "2024-01-01"}])
-        assert len(TeamIndex(df).team("Nobody")) == 0
+        window = MatchHistory(self.FRAME).team_window("A", "2025-01-01")
+        # A: won 2-1 at home, drew 0-0 away, won 4-0 at home.
+        assert list(window.gf) == [2.0, 0.0, 4.0]
+        assert list(window.ga) == [1.0, 0.0, 0.0]
+        assert list(window.pts) == [3.0, 1.0, 3.0]
+        assert list(window.cs) == [0.0, 1.0, 1.0]
+
+    def test_cut_is_strictly_before_the_fixture(self):
+        """The no-leakage rule: a fixture's own date must never be included."""
+        from data.history import MatchHistory
+
+        window = MatchHistory(self.FRAME).team_window("A", "2024-01-22")
+        assert window.played == 2, "the 22 Jan fixture leaked into its own window"
+        assert 4.0 not in list(window.gf)
+
+    def test_top_flight_count_excludes_the_lower_division(self):
+        from data.history import MatchHistory
+
+        window = MatchHistory(self.FRAME).team_window("C", "2025-01-01")
+        assert window.played == 3
+        assert window.top_flight == 2, "the E1 match was counted as top flight"
+
+    def test_head_to_head_reads_both_directions(self):
+        from data.history import MatchHistory
+
+        index = MatchHistory(self.FRAME)
+        # A and C met twice before February, once each way round: C 0-0 A on
+        # 8 Jan and A 4-0 C on 22 Jan. Both must appear, oldest first, whichever
+        # club is nominally at home in the fixture being predicted.
+        goals, wins = index.h2h_window("A", "C", "2024-02-01")
+        assert list(goals) == [0.0, 4.0]
+        assert wins == 1, "A drew one and won one"
+        # Reversed fixture: the same two meetings, scored for the other side.
+        goals, wins = index.h2h_window("C", "A", "2024-02-01")
+        assert list(goals) == [0.0, 4.0]
+        assert wins == 0, "C drew one and lost one"
+
+    def test_unknown_team_returns_an_empty_window_not_an_error(self):
+        from data.history import MatchHistory
+
+        window = MatchHistory(self.FRAME).team_window("Nobody", "2024-06-01")
+        assert window.played == 0
+        assert len(window.gf) == 0
+

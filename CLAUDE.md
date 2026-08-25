@@ -30,9 +30,11 @@ corrects figures in `docs/REBUILD_PLAN.md` that the artefacts disagree with.
 | P10 Backtest & settled accuracy | **Done** — 1,140 matches over 3 seasons, 53.3% correct |
 | P11 Dashboard redesign | **Done** — honest empty states, no fabricated zeros |
 | N1-N7 Finalisation | **Done** — see `docs/FINALISATION_LOG.md` |
+| Feature-build performance | **Done** (2026-08-25) — retrain 17m -> 57s, output identical |
 
-Verified: `docker exec epl-predictor-backend-1 python -m pytest tests/ -q`.
-(`test_api.py` needs httpx, so run the suite in the container.)
+Verified: `docker exec epl-predictor-backend-1 python -m pytest tests/ -q` —
+**193 pass**. (`test_api.py` needs httpx *and* a seeded database, so run the
+suite inside the running container, not a bare `docker run`.)
 
 Phases were **strictly sequential**: the model must not be retrained on
 mis-ordered history or synthetic constants, which is why P6 came last.
@@ -115,14 +117,17 @@ of the goals column.
 backend/
   main.py               FastAPI app, /health, /health/ready, /data/*
   lifecycle.py          Background startup ingestion + periodic refresh
-  jobs.py               Single-flight background jobs (retrain, backtest)
+  jobs.py               Single-flight background jobs (retrain, backtest, refresh)
   data/ingestion.py     Season discovery + PulseLive fetch + DB seed
-  data/features.py      Rolling windows, venue splits, h2h, feature vector
+  data/history.py       Point-in-time index: binary search per club, not a scan
+  data/vector.py        One fixture's features: rolling, venue, h2h, strength
+  data/features.py      Match frame + cache, training matrix (barrel for vector)
   models/ml_model.py    XGBoost train/predict, Poisson W/D/L, confidence
   db/database.py        SQLAlchemy models + lightweight migrations
   routers/              predict, teams, results, analytics
 frontend/src/
   pages/                Dashboard, Predict, Teams, History, Analytics, Model
+  hooks/useJob.js       Polls a server-side job (retrain, backtest, refresh)
   components/           PredictionCard, TeamStats, HistoryTable, ui/
 docs/
   FINALISATION_LOG.md   What was measured on 2026-08-24, and what it corrected
@@ -151,10 +156,21 @@ Seeding runs on a background thread, so uvicorn answers `/health` within seconds
 of boot; `/health/ready` returns 503 with the current phase until the seed
 finishes (measured: 16s to live, 59s to ready on a wiped volume).
 
-Retraining is a background job — `POST /model/retrain` returns 202 with a
-`job_id`, and `GET /model/jobs/{job_id}` reports progress. It used to be a
-synchronous request that outlived the browser's timeout, so a successful
-retrain was reported to the user as a failure.
+**Retrain, backtest and refresh are all background jobs.** Each returns 202 with
+a `job_id` and is polled — `GET /model/jobs/{id}` for the first two,
+`GET /data/jobs/{id}` for refresh. Each was once a synchronous request that
+outlived the browser's timeout, so work that succeeded on the server was
+reported to the user as a failure.
+
+**Do not reintroduce a full-frame scan into the feature build.** Every window a
+fixture needs is a prefix of one club's own rows, so `data/history.py` finds it
+with a binary search. Deriving one by filtering the whole frame
+(`df[(df["home_team"] == team) & (df["date"] < before)]`) costs about a dozen
+scans per fixture, which on the deployed dataset meant fifteen minutes of
+"building feature matrix" before the first estimator was fitted. Measured: 356s
+-> 1.5s locally, and a production-sized retrain from 17m 04s to 57s, with all 75
+columns bit-identical. `tests/test_feature_index.py` keeps the scan as a
+reference and asserts the index still agrees with it.
 
 The backend image build downloads a 297 MB xgboost wheel. `backend/Dockerfile`
 uses a BuildKit pip cache mount so an interrupted build resumes instead of

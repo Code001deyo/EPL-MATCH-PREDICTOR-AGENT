@@ -28,6 +28,19 @@ METRICS_PATH = os.path.join(os.path.dirname(__file__), "..", "saved_models", "me
 MIN_TRAINING_MATCHES = 50
 
 
+def _reporter(job_id):
+    """Adapt a worker's (stage, done, total) callback to the job store.
+
+    The unit is derived from the stage because one job counts different things
+    as it goes: fixtures while the feature matrix is built, then estimators or
+    matchweeks. Without it the UI labelled every count "models".
+    """
+    def report(stage, done, total):
+        unit = "fixtures" if stage.startswith("building") else "matchweeks"
+        jobs.progress(job_id, stage=stage, done=done, total=total, unit=unit)
+    return report
+
+
 def _require_data(db, action: str):
     """Reject early, with a real status code.
 
@@ -48,10 +61,16 @@ def _require_data(db, action: str):
 def retrain_model(response: Response, db: Session = Depends(get_db)):
     """Start a retrain and return immediately with a job id.
 
-    Training fits 12 estimators over the full history and takes minutes. Held
-    open as a synchronous request it gave the browser nothing to render and
-    frequently outlived the browser's own timeout, so a successful retrain was
-    reported to the user as a failure. Poll /model/jobs/{job_id} for progress.
+    Training fits 12 estimators over the full history. Held open as a
+    synchronous request it gave the browser nothing to render and frequently
+    outlived the browser's own timeout, so a successful retrain was reported to
+    the user as a failure. Poll /model/jobs/{job_id} for progress.
+
+    The job used to spend the great majority of its life before the first fit,
+    building the feature matrix by scanning the whole frame per fixture: fifteen
+    minutes on the deployed dataset, reported as a single unchanging stage. That
+    build is now indexed (data/history.py) and takes seconds, and it reports
+    fixtures as it goes.
     """
     _require_data(db, "train")
 
@@ -74,14 +93,18 @@ def retrain_model(response: Response, db: Session = Depends(get_db)):
             # transaction here also stops a long retrain from holding a connection
             # out of a pool that live predictions are drawing from.
             session.close()
-            feature_df = build_training_matrix(matches)
-            jobs.progress(job_id, stage="training", total=12)
+            # The build reports fixtures as it goes. It used to report only on
+            # entry, so the operator watched a bar that could not distinguish
+            # "working" from "wedged" - and before the feature build was indexed
+            # it sat there for fifteen minutes on the deployed instance.
+            feature_df = build_training_matrix(matches, on_progress=_reporter(job_id))
+            jobs.progress(job_id, stage="training", done=0, total=12, unit="models")
             return {
                 "samples": int(len(feature_df)),
                 "metrics": train(
                     feature_df,
                     on_progress=lambda stage, done, total: jobs.progress(
-                        job_id, stage=stage, done=done, total=total
+                        job_id, stage=stage, done=done, total=total, unit="models"
                     ),
                 ),
             }
@@ -110,13 +133,7 @@ def backtest_run(response: Response, seasons: int = 3, db: Session = Depends(get
         session = SessionLocal()
         try:
             jobs.progress(job_id, stage="building feature matrix")
-            return run_backtest(
-                session,
-                seasons=seasons,
-                on_progress=lambda stage, done, total: jobs.progress(
-                    job_id, stage=stage, done=done, total=total
-                ),
-            )
+            return run_backtest(session, seasons=seasons, on_progress=_reporter(job_id))
         finally:
             session.close()
 

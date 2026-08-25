@@ -57,6 +57,15 @@ def last_refreshed():
         return _state["last_refreshed"]
 
 
+# Serialises every refresh, whoever started it: the operator endpoint, the
+# in-process timer and startup ingestion all land here. Refresh deletes the
+# season's rows and re-inserts them, so two overlapping runs would be reading a
+# table the other one had half-emptied. The HTTP path is additionally
+# single-flight through jobs.submit(), but that cannot see the timer, and the
+# timer cannot see it.
+_refresh_lock = threading.Lock()
+
+
 def refresh_live_data():
     """Refresh the in-progress season without destroying its statistics.
 
@@ -69,6 +78,11 @@ def refresh_live_data():
     Refresh, re-enrich and settle are one unit here, so no caller can perform
     half of it.
     """
+    with _refresh_lock:
+        return _refresh_live_data()
+
+
+def _refresh_live_data():
     from data.ingestion import refresh_current_season, _current_season_label
     from data.reconcile import enrich_all
     from db.database import SessionLocal
@@ -182,7 +196,10 @@ def _refresh_loop(interval_hours):
         time.sleep(interval)
         try:
             print(f"[lifecycle] scheduled refresh ({interval_hours}h)")
-            refresh_live_data()
+            # Through the job store so an operator polling a refresh they started
+            # sees this one rather than a second run racing it.
+            import jobs
+            jobs.submit("refresh", lambda _job_id: refresh_live_data())
         except Exception as exc:
             _record_error("scheduled-refresh", exc)
 

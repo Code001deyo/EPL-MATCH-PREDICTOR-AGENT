@@ -13,8 +13,15 @@ Feature computation is NOT walk-forward here because it does not need to be:
 never depends on anything at or after its own kickoff regardless of when the
 matrix is built. What must be walk-forward is the *estimator* — fitting once
 on the full history and then "predicting" the past scores the model on rows
-it trained on. So the full matrix is built once (expensive, ~minutes) and then
-sliced by row position per matchweek; only the fit is repeated per step.
+it trained on. So the full matrix is built once and then sliced by row position
+per matchweek; only the fit is repeated per step.
+
+What remains after the feature build was indexed (data/history.py) is the fits
+themselves: two estimators per matchweek. Measured on the full 4,570-fixture
+dataset, a three-season run is 8 seconds of feature build and 649 seconds of
+refitting. That balance is the method rather than an inefficiency - a
+walk-forward backtest *is* one refit per step - which is why it reports
+per-matchweek progress instead of pretending to be quick.
 """
 from __future__ import annotations
 
@@ -60,7 +67,7 @@ def _season_matchweek_folds(meta: pd.DataFrame, min_train_rows: int):
         yield season, mw, train_idx, g.index.to_numpy()
 
 
-def _build_matrix(db: Session):
+def _build_matrix(db: Session, on_progress=None):
     """Full feature matrix + aligned fixture metadata, built exactly once.
 
     The session's transaction is released as soon as the rows are in memory. A
@@ -73,7 +80,7 @@ def _build_matrix(db: Session):
     df = load_matches(db)
     db.commit()
     e0 = df[df["division"].fillna("E0") == "E0"].reset_index(drop=True)
-    feat_df = build_training_matrix(df).reset_index(drop=True)
+    feat_df = build_training_matrix(df, on_progress=on_progress).reset_index(drop=True)
     if len(e0) != len(feat_df):
         raise RuntimeError(
             f"feature matrix ({len(feat_df)}) misaligned with E0 fixtures ({len(e0)})"
@@ -105,17 +112,28 @@ def _predict_fold(X, y_home, y_away, feat_df, meta, train_idx, predict_idx):
     home_model = fit(make_model(), X[train_idx], y_home[train_idx])
     away_model = fit(make_model(), X[train_idx], y_away[train_idx])
 
+    # Predicted as one batch per fold rather than a row at a time. The estimator
+    # pays a fixed per-call cost — building a DMatrix, crossing into the native
+    # library — that dwarfs the arithmetic for a single row, and the old loop
+    # paid it 2x for every one of the fold's fixtures.
+    fold = X[predict_idx]
+    home_lambdas = np.maximum(home_model.predict(fold).astype(float), 0.1)
+    away_lambdas = np.maximum(away_model.predict(fold).astype(float), 0.1)
+
     rows = []
-    for i in predict_idx:
-        h_lambda = max(float(home_model.predict(X[i:i + 1])[0]), 0.1)
-        a_lambda = max(float(away_model.predict(X[i:i + 1])[0]), 0.1)
+    for slot, i in enumerate(predict_idx):
+        h_lambda = float(home_lambdas[slot])
+        a_lambda = float(away_lambdas[slot])
         home_p, draw_p, away_p = _poisson_probs(h_lambda, a_lambda)
         # Same decision rule as the live path. If these two ever diverge again the
         # backtest stops measuring the product and starts measuring something the
         # user is never shown, which is how a 48% prediction came to be reported
         # as 53%.
         pred_home, pred_away, _outcome = most_likely_scoreline(h_lambda, a_lambda)
-        confidence = _confidence(h_lambda, a_lambda, feat_df.iloc[i].to_dict())
+        # The feature values _confidence reads are exactly FEATURE_COLS, which is
+        # what X holds — so this is the same dict it was handed before, without
+        # materialising a 75-column pandas Series per fixture to get it.
+        confidence = _confidence(h_lambda, a_lambda, dict(zip(FEATURE_COLS, X[i])))
         r = meta.iloc[i]
         rows.append({
             "fixture_id": int(r["id"]),
@@ -159,7 +177,7 @@ def run_backtest(db: Session, min_train_rows: int = MIN_TRAIN_ROWS,
     scoring every season is far slower without changing what the calibration
     buckets tell you.
     """
-    meta, feat_df, X, y_home, y_away = _build_matrix(db)
+    meta, feat_df, X, y_home, y_away = _build_matrix(db, on_progress=on_progress)
 
     scored_seasons = _recent_complete_seasons(meta, seasons)
     if scored_seasons is not None:
@@ -174,7 +192,7 @@ def run_backtest(db: Session, min_train_rows: int = MIN_TRAIN_ROWS,
     for i, (season, mw, train_idx, predict_idx) in enumerate(folds, 1):
         print(f"Backtesting {season} MW{mw}: {len(train_idx)} train rows, {len(predict_idx)} fixtures")
         if on_progress:
-            on_progress(f"{season} MW{mw}", i, len(folds))
+            on_progress(f"refitting {season} MW{mw}", i, len(folds))
         results.extend(_predict_fold(X, y_home, y_away, feat_df, meta, train_idx, predict_idx))
 
     _store_results(db, results)

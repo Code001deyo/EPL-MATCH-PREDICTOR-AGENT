@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from db.database import get_db, MatchResult
-from auth import require_admin
+from auth import require_admin, HTTPException, Response
 from db.teams import DIVISIONS, TOP_FLIGHT, division_filter, resolve_division, top_flight_teams
 import requests
+
+import jobs
 
 router = APIRouter()
 
@@ -186,29 +188,62 @@ def current_season_fixtures(db: Session = Depends(get_db)):
     return fixtures_by_season(current_season(), db)
 
 
-@router.post("/data/refresh", dependencies=[Depends(require_admin)])
-def refresh_data():
-    """Refresh the in-progress season: re-fetch, re-attach statistics, settle.
+@router.post("/data/refresh", status_code=202, dependencies=[Depends(require_admin)])
+def refresh_data(response: Response):
+    """Start a refresh of the in-progress season and return immediately.
 
-    This used to call refresh_current_season() alone. That deletes the season's
-    rows and re-inserts them from PulseLive, which carries goals but no shot
-    data — so every call quietly destroyed the football-data.co.uk statistics
-    and reported {"status": "refreshed"} while degrading the data. The three
-    steps are now one unit in lifecycle.refresh_live_data().
+    Refresh re-fetches the season, re-attaches statistics and settles any
+    predictions the new results resolve. It used to call
+    `refresh_current_season()` alone, which deletes the season's rows and
+    re-inserts them from PulseLive — carrying goals but no shot data — so every
+    call quietly destroyed the football-data.co.uk statistics and reported
+    {"status": "refreshed"} while degrading the data. The three steps are one
+    unit in `lifecycle.refresh_live_data()`.
+
+    It is now a background job for the same reason retraining is. The work is
+    two upstream downloads plus a reconciliation pass, and on the deployed
+    instance that runs longer than the browser and the CDN in front of it will
+    hold an idle connection open — so an operator saw a failed request for a
+    refresh that was still running, and had no way to learn how it ended.
+
+    Making it a job also gives it the mutual exclusion it never had: two
+    overlapping refreshes would each delete and re-insert the same season's rows.
     """
     import lifecycle
-    result = lifecycle.refresh_live_data()
-    unpublished = result["played_fixtures"] is None
-    return {
-        # Do not claim "refreshed" when the season is not published yet: the old
-        # response said refreshed with played_fixtures=null.
-        "status": "season-not-published" if unpublished else "refreshed",
-        "played_fixtures": result["played_fixtures"],
-        "statistics_attached": result["enriched"],
-        "predictions_settled": result["settled"],
-        "season": result["season"],
-        "last_refreshed": lifecycle.last_refreshed(),
-    }
+
+    def work(_job_id):
+        result = lifecycle.refresh_live_data()
+        unpublished = result["played_fixtures"] is None
+        return {
+            # Do not claim "refreshed" when the season is not published yet: the
+            # old response said refreshed with played_fixtures=null.
+            "status": "season-not-published" if unpublished else "refreshed",
+            "played_fixtures": result["played_fixtures"],
+            "statistics_attached": result["enriched"],
+            "predictions_settled": result["settled"],
+            "season": result["season"],
+            "last_refreshed": lifecycle.last_refreshed(),
+        }
+
+    job, created = jobs.submit("refresh", work)
+    if not created:
+        response.status_code = 200
+    return {"job_id": job["id"], "state": job["state"], "started": created, "job": job}
+
+
+@router.get("/data/refresh")
+def refresh_status():
+    """Whatever refresh is in flight, so a reloaded page can re-attach."""
+    return {"refresh": jobs.active("refresh")}
+
+
+@router.get("/data/jobs/{job_id}")
+def refresh_job(job_id: str):
+    """Progress and outcome of a refresh started above."""
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"No job {job_id}")
+    return job
 
 
 @router.get("/team/{team_name}/stats")
