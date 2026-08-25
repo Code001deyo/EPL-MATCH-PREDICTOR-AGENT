@@ -169,6 +169,11 @@ def backtest_report(season: str = None, db: Session = Depends(get_db)):
         "actual_home": r.actual_home, "actual_away": r.actual_away,
         "home_win_prob": r.home_win_prob, "draw_prob": r.draw_prob,
         "away_win_prob": r.away_win_prob, "confidence": r.confidence,
+        # Carried so the summary can report the bookmakers' accuracy on exactly
+        # these fixtures. Omitting them here silently emptied the market
+        # comparison while every other figure looked fine, which is the kind of
+        # missing baseline that makes an accuracy number unreadable.
+        "odds_home": r.odds_home, "odds_draw": r.odds_draw, "odds_away": r.odds_away,
         # The model's actual W/D/L call is the argmax of its Poisson
         # probabilities, NOT a comparison of the rounded scoreline: two
         # near-identical lambdas (e.g. 1.6 vs 1.4) round to different
