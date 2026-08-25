@@ -60,7 +60,21 @@ def retrain_model(response: Response, db: Session = Depends(get_db)):
         session = SessionLocal()
         try:
             jobs.progress(job_id, stage="building feature matrix")
-            feature_df = build_training_matrix(load_matches(session))
+            matches = load_matches(session)
+            # Release the transaction before the long CPU-bound work.
+            #
+            # Reading opens a transaction, and it stayed open for the whole
+            # feature build and training run - tens of minutes. Managed Postgres
+            # kills connections that sit idle inside a transaction, so the retrain
+            # died with "terminating connection due to idle-in-transaction
+            # timeout" after doing all the work and before saving any of it.
+            #
+            # Nothing below needs the database until training finishes: the
+            # feature matrix is an in-memory DataFrame by this point. Ending the
+            # transaction here also stops a long retrain from holding a connection
+            # out of a pool that live predictions are drawing from.
+            session.close()
+            feature_df = build_training_matrix(matches)
             jobs.progress(job_id, stage="training", total=12)
             return {
                 "samples": int(len(feature_df)),

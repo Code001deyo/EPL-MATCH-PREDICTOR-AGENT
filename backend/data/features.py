@@ -120,42 +120,87 @@ def _top_flight_matches(df: pd.DataFrame, team: str, before_date: str) -> int:
     return int(len(played))
 
 
+# The longest window any rolling feature uses. Only this many of a team's most
+# recent matches can affect the result, which is what makes the truncation below
+# safe.
+LONGEST_ROLLING_WINDOW = 10
+
+
 def _team_rolling(df: pd.DataFrame, team: str, before_date: str, window: int = 5) -> dict:
-    home = df[(df["home_team"] == team) & (df["date"] < before_date)].copy()
-    away = df[(df["away_team"] == team) & (df["date"] < before_date)].copy()
+    """Rolling form for one team, from matches strictly before `before_date`.
 
-    home["gf"] = home["home_goals"]
-    home["ga"] = home["away_goals"]
-    home["sot"] = home["home_shots_ot"]
-    home["shots"] = home["home_shots"]
-    home["corners"] = home["home_corners"]
-    home["fouls"] = home["home_fouls"]
-    home["yellows"] = home["home_yellow_cards"]
-    home["pts"] = home.apply(lambda r: 3 if r.home_goals > r.away_goals else (1 if r.home_goals == r.away_goals else 0), axis=1)
-    home["cs"] = (home["away_goals"] == 0).astype(int)
-    home["btts"] = ((home["home_goals"] > 0) & (home["away_goals"] > 0)).astype(int)
-    home["over25"] = ((home["home_goals"] + home["away_goals"]) > 2).astype(int)
+    ## Why this is written the way it is
 
-    away["gf"] = away["away_goals"]
-    away["ga"] = away["home_goals"]
-    away["sot"] = away["away_shots_ot"]
-    away["shots"] = away["away_shots"]
-    away["corners"] = away["away_corners"]
-    away["fouls"] = away["away_fouls"]
-    away["yellows"] = away["away_yellow_cards"]
-    away["pts"] = away.apply(lambda r: 3 if r.away_goals > r.home_goals else (1 if r.away_goals == r.home_goals else 0), axis=1)
-    away["cs"] = (away["home_goals"] == 0).astype(int)
-    away["btts"] = ((away["home_goals"] > 0) & (away["away_goals"] > 0)).astype(int)
-    away["over25"] = ((away["home_goals"] + away["away_goals"]) > 2).astype(int)
+    The obvious version - and the one this replaced - derived eleven columns
+    (goals for, against, shots, points, clean sheets, ...) across the team's
+    *entire* history, concatenated home and away, sorted, and then read
+    `.tail(5)` and `.tail(10)` off the end. It did work proportional to a club's
+    whole past in order to produce ten numbers.
+
+    That was 71% of the total feature-build time under cProfile, and it is why
+    extending the history from seven seasons to twenty-one turned a retrain into
+    something that did not finish: the cost is quadratic in the size of the
+    database, because every fixture pays for every earlier fixture.
+
+    Only the last `LONGEST_ROLLING_WINDOW` matches can reach any output, so each
+    side is truncated to that many *first* and the derived columns are computed on
+    at most twenty rows. Results are identical, not approximate:
+
+      - the last ten of the merged sequence must come from the last ten of each
+        side, since merging cannot promote an eleventh-from-last row past ten
+        later ones;
+      - `sort_values` is stable and the concat order is unchanged, so rows sharing
+        a date keep the same relative order they had before;
+      - `matches_played` still counts the full history, which is cheap because it
+        is a length rather than a transformation.
+    """
+    keep = max(window, LONGEST_ROLLING_WINDOW)
+
+    home_all = df[(df["home_team"] == team) & (df["date"] < before_date)]
+    away_all = df[(df["away_team"] == team) & (df["date"] < before_date)]
+
+    # Counted before truncation - this one genuinely needs the whole history.
+    total_matches = int(len(home_all) + len(away_all))
+
+    home = home_all.tail(keep).copy()
+    away = away_all.tail(keep).copy()
+
+    def _derive(frame, gf_col, ga_col, sot_col, shots_col, corners_col,
+                fouls_col, yellows_col):
+        """Attach the derived columns for one venue's rows.
+
+        Points are computed with np.where rather than `.apply(lambda ...)`, which
+        called a Python function once per row and cost 10 of the 100 seconds in
+        the profile on its own.
+        """
+        gf = frame[gf_col]
+        ga = frame[ga_col]
+        frame["gf"] = gf
+        frame["ga"] = ga
+        frame["sot"] = frame[sot_col]
+        frame["shots"] = frame[shots_col]
+        frame["corners"] = frame[corners_col]
+        frame["fouls"] = frame[fouls_col]
+        frame["yellows"] = frame[yellows_col]
+        frame["pts"] = np.where(gf > ga, 3, np.where(gf == ga, 1, 0))
+        frame["cs"] = (ga == 0).astype(int)
+        frame["btts"] = ((frame["home_goals"] > 0) & (frame["away_goals"] > 0)).astype(int)
+        frame["over25"] = ((frame["home_goals"] + frame["away_goals"]) > 2).astype(int)
+        return frame
+
+    home = _derive(home, "home_goals", "away_goals", "home_shots_ot", "home_shots",
+                   "home_corners", "home_fouls", "home_yellow_cards")
+    away = _derive(away, "away_goals", "home_goals", "away_shots_ot", "away_shots",
+                   "away_corners", "away_fouls", "away_yellow_cards")
 
     cols = ["date", "gf", "ga", "sot", "shots", "corners", "fouls", "yellows", "pts", "cs", "btts", "over25"]
-    combined = pd.concat([home[cols], away[cols]]).sort_values("date")
+    combined = pd.concat([home[cols], away[cols]]).sort_values("date", kind="stable")
 
     last5 = combined.tail(window)
     last10 = combined.tail(10)
 
     # P5: no history means unknown, not zero. Zero is a meaningful value in every
-    # one of these features — a team that "scores 0.0 and concedes 0.0" is a
+    # one of these features - a team that "scores 0.0 and concedes 0.0" is a
     # strong (and wrong) signal. NaN lets XGBoost learn a split for missingness.
     if len(last5) == 0:
         unknown = {k: np.nan for k in ROLLING_FEATURES}
@@ -180,7 +225,7 @@ def _team_rolling(df: pd.DataFrame, team: str, before_date: str, window: int = 5
         "cs_rate": _safe_mean(last5["cs"], fallback=np.nan),
         "btts_rate": _safe_mean(last10["btts"], fallback=np.nan),
         "over_2_5_rate": _safe_mean(last10["over25"], fallback=np.nan),
-        "matches_played": int(len(combined)),
+        "matches_played": total_matches,
     }
 
 

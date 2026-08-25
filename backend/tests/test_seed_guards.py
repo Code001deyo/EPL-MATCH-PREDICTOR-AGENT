@@ -101,3 +101,46 @@ class TestLegacyDateGuard:
         sorts wrongly wherever it appears."""
         _add(db, "2024-25", "E1", 10, date="15/08/2024")
         assert _legacy_date_seasons(db) == ["2024-25"]
+
+
+class TestSeasonPruning:
+    """Lowering EARLIEST_SEASON must actually shrink the database.
+
+    Seeding only ever adds, so without pruning a wider setting is permanent:
+    seasons fetched under it would remain forever, slowing every feature build -
+    which is quadratic in stored history - while contributing nothing the model
+    is allowed to train on.
+    """
+
+    def test_removes_only_seasons_before_the_cutoff(self, db):
+        from data.ingestion import _prune_seasons_before
+        _add(db, "2005-06", "E0", 10)
+        _add(db, "2013-14", "E0", 10)
+        _add(db, "2014-15", "E0", 10)
+        _add(db, "2025-26", "E0", 10)
+
+        assert _prune_seasons_before(db, "2014-15") == 2
+        kept = sorted({r.season for r in db.query(MatchResult).all()})
+        assert kept == ["2014-15", "2025-26"]
+
+    def test_the_cutoff_season_itself_is_kept(self, db):
+        """Off-by-one here silently discards a full season of training data."""
+        from data.ingestion import _prune_seasons_before
+        _add(db, "2014-15", "E0", 10)
+        assert _prune_seasons_before(db, "2014-15") == 0
+        assert db.query(MatchResult).count() == 1
+
+    def test_prunes_every_division(self, db):
+        """A Championship season outside the window is just as useless, and its
+        rows are the larger half of the history the feature build scans."""
+        from data.ingestion import _prune_seasons_before
+        _add(db, "2005-06", "E1", 20)
+        _add(db, "2005-06", "E0", 10)
+        assert _prune_seasons_before(db, "2014-15") == 2
+        assert db.query(MatchResult).count() == 0
+
+    def test_no_op_on_an_already_narrow_database(self, db):
+        from data.ingestion import _prune_seasons_before
+        _add(db, "2024-25", "E0", 10)
+        assert _prune_seasons_before(db, "2014-15") == 0
+        assert db.query(MatchResult).count() == 1

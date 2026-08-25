@@ -61,8 +61,17 @@ def _season_matchweek_folds(meta: pd.DataFrame, min_train_rows: int):
 
 
 def _build_matrix(db: Session):
-    """Full feature matrix + aligned fixture metadata, built exactly once."""
+    """Full feature matrix + aligned fixture metadata, built exactly once.
+
+    The session's transaction is released as soon as the rows are in memory. A
+    walk-forward run refits per matchweek and takes far longer than a single
+    retrain, and managed Postgres terminates connections left idle inside a
+    transaction - which killed a production retrain outright. Everything after
+    this read is pure computation until `_store_results` writes at the end, and
+    that write simply begins a fresh transaction.
+    """
     df = load_matches(db)
+    db.commit()
     e0 = df[df["division"].fillna("E0") == "E0"].reset_index(drop=True)
     feat_df = build_training_matrix(df).reset_index(drop=True)
     if len(e0) != len(feat_df):

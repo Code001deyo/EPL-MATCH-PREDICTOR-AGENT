@@ -22,25 +22,37 @@ PL_HEADERS = {
 # Premier League competition id in the PulseLive API
 PL_COMPETITION_ID = 1
 
-# Earliest season we train on.
+# Earliest season we keep and train on.
 #
-# Was 2019-20, on the stated grounds that older seasons are "not useful training
-# data". That was an assumption, and measurement contradicted it: seven seasons is
-# a thin base for a 60-feature model, and the source carries far more.
+# This has moved twice, and both moves were measured rather than assumed.
 #
-# 2005-06 is not an arbitrary earlier date. It is the first season for which
-# football-data.co.uk publishes **both** the full statistics block (shots, shots
-# on target, corners, fouls, cards - available from 2000-01) **and** bookmaker
-# odds (from 2005-06). Odds are the model's strongest feature, so starting here
-# means every training row can carry every feature rather than a fifth of the
-# history being systematically blind in its most important column.
+# It was 2019-20, justified by a comment asserting older seasons were "not useful
+# training data". That was untested, and seven seasons is thin for a 55-feature
+# model.
 #
-# Going back further is possible - the archive reaches 1993-94 - but 2000-05
-# would add rows with no market price, and pre-2000 rows with no match statistics
-# at all. That is a decision to revisit with a measurement, not a default.
+# It then went to 2005-06 - the first season carrying both full match statistics
+# and bookmaker odds. That was too far. Two things came out of it:
 #
-# Effect: E0 training rows go from ~2,660 to ~7,980.
-EARLIEST_SEASON = "2005-06"
+#   1. The extra history buys almost nothing. Walk-forward over 6,080 matches,
+#      training on the most recent N seasons:
+#
+#          N=3   52.8%  RPS 0.2028
+#          N=5   53.0%  RPS 0.2024
+#          N=8   53.0%  RPS 0.2017
+#          N=12  53.6%  RPS 0.2016
+#          N=20  53.5%  RPS 0.2014
+#
+#      Past about eight seasons the curve is flat; 12 and 20 differ by 0.0002 RPS,
+#      which is noise, and 12 is fractionally the better of the two on accuracy.
+#
+#   2. History is expensive. The feature build is quadratic in the size of the
+#      stored history - every fixture's rolling windows scan the matches before
+#      it - so 21 seasons made a production retrain take longer than the database
+#      would hold a connection open for. It did not finish.
+#
+# 2014-15 gives twelve completed seasons: the flat part of the curve, at roughly a
+# third of the feature-build cost of 2005-06.
+EARLIEST_SEASON = "2014-15"
 
 # 20 clubs x 38 rounds. Used to tell a completed season from a half-seeded one.
 COMPLETE_SEASON_FIXTURES = 380
@@ -252,6 +264,36 @@ def _corrupt_matchweek_seasons(db) -> list[str]:
     )
 
 
+def _prune_seasons_before(db, earliest: str) -> int:
+    """Drop stored seasons older than the configured window.
+
+    Without this, lowering EARLIEST_SEASON is one-way: seeding only ever adds, so
+    seasons pulled in under a wider setting would sit in the database forever,
+    slowing every feature build while contributing nothing the model is allowed
+    to train on.
+
+    Deliberately narrow, and deliberately loud. A guard in this file previously
+    answered a per-season problem with `DELETE FROM match_results` and took
+    production down; this deletes exactly the seasons that fall outside the
+    configured range, names them, and touches nothing else.
+    """
+    stale = sorted({
+        season for (season,) in db.query(MatchResult.season).distinct().all()
+        if season and season < earliest
+    })
+    if not stale:
+        return 0
+    print(f"Pruning {len(stale)} season(s) older than {earliest}: {stale}")
+    removed = (
+        db.query(MatchResult)
+        .filter(MatchResult.season.in_(stale))
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    print(f"  removed {removed} rows")
+    return removed
+
+
 def _legacy_date_seasons(db) -> list[str]:
     """Seasons still holding a pre-P1 'DD/MM/YYYY' date.
 
@@ -296,6 +338,8 @@ def seed_database():
             MatchResult.season.in_(legacy)
         ).delete(synchronize_session=False)
         db.commit()
+
+    _prune_seasons_before(db, EARLIEST_SEASON)
 
     season_ids = get_season_ids()
 
