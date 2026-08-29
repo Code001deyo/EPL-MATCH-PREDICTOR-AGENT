@@ -471,20 +471,57 @@ def refresh_current_season():
         print(f"Season {CURRENT} not published by the API yet; skipping refresh.")
         return
 
-    db = SessionLocal()
     print(f"Refreshing {CURRENT} (id={season_id})...")
+
+    # Fetch BEFORE deleting anything.
+    #
+    # This used to delete the season's E0 rows, commit, and only then call the
+    # API. Any failure between those two points destroyed the in-progress season
+    # and put nothing back. That is not hypothetical: on 2026-08-29 the feed
+    # returned an empty frame, `df["home_goals"]` raised KeyError('home_goals')
+    # because an empty DataFrame has no columns, and the re-insert never ran. All
+    # 14 played fixtures of 2026-27 were lost. Nothing looked like a failure from
+    # outside: the error became one line in the `errors` list on /health/ready and
+    # the app reported itself ready with an empty season.
+    df = load_season_from_api(CURRENT, season_id)
+    if df is None or df.empty or "home_goals" not in df.columns:
+        # Nothing to write, so nothing may be deleted. A feed that returns
+        # nothing means "no news", never "the season did not happen".
+        print(f"  {CURRENT}: feed returned no usable fixtures; keeping stored rows.")
+        return 0
+
+    played = df[df["home_goals"].notna() & df["away_goals"].notna()].copy()
+
+    db = SessionLocal()
+
+    # The same hazard one step along: a feed that answers with fixtures but no
+    # *played* ones would delete every stored result and insert nothing. Results
+    # do not un-happen, so a drop to zero is a feed glitch, not a season being
+    # rolled back — and mid-campaign it would silently empty the table the model
+    # trains on. A season that genuinely has not kicked off is indistinguishable
+    # here, and costs only a skipped refresh.
+    if played.empty:
+        stored = db.query(MatchResult).filter(
+            MatchResult.season == CURRENT, MatchResult.division == "E0"
+        ).count()
+        if stored:
+            print(f"  {CURRENT}: feed reports no played fixtures but {stored} are "
+                  f"stored; keeping them.")
+            db.close()
+            return 0
+
     # Scoped to E0. This delete used to take the whole season, and the re-insert
     # below only writes Premier League fixtures from PulseLive — so every refresh
     # silently destroyed the current Championship season. It runs on boot and every
     # six hours, which is why the in-progress E1 rows kept disappearing minutes
     # after they were seeded.
+    #
+    # The delete is no longer committed on its own: it lands in the same
+    # transaction as the insert below, so the season is never briefly empty and a
+    # failure between them rolls both back.
     db.query(MatchResult).filter(
         MatchResult.season == CURRENT, MatchResult.division == "E0"
     ).delete()
-    db.commit()
-
-    df = load_season_from_api(CURRENT, season_id)
-    played = df[df["home_goals"].notna() & df["away_goals"].notna()].copy()
 
     records = [
         MatchResult(
