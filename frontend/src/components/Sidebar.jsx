@@ -10,6 +10,7 @@ const NAV = [
   { to: "/teams",     label: "Teams"      },
   { to: "/history",   label: "History"    },
   { to: "/model",     label: "Model"      },
+  { to: "/explainer", label: "How it works" },
 ];
 
 /* Fixed 220px rail on desktop; an off-canvas drawer below the md breakpoint.

@@ -11,6 +11,7 @@ import Analytics from "./pages/Analytics";
 import Teams from "./pages/Teams";
 import History from "./pages/History";
 import ModelPage from "./pages/ModelPage";
+import Explainer from "./pages/Explainer";
 /* Code-split, so the sign-in form, the operator console and the calls they make
  * are in a chunk the public site never downloads. A visitor to the dashboard
  * fetches none of it.
@@ -55,6 +56,7 @@ function Shell() {
             <Route path="/teams"     element={<Teams />} />
             <Route path="/history"   element={<History />} />
             <Route path="/model"     element={<ModelPage />} />
+            <Route path="/explainer" element={<Explainer />} />
 
             {/* Operator route. Unlinked from anywhere in the app and reachable
                 only by typing it. The path is not the protection — every endpoint
