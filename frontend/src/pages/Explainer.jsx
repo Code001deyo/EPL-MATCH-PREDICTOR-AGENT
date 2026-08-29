@@ -11,72 +11,90 @@ import { C, space, type } from "../theme";
  *
  * It exists because the headline number is the most misread thing on the site.
  * "53.6% correct" reads as a poor grade against an assumed 100%, when the figure
- * that bounds it is the bookmakers' 54.2% — and a visitor has no way to know that
- * unless the site says so. Every other page reports what the model did; this one
- * is the only place that says what a good answer would even look like.
+ * that bounds it is the bookmakers' 54.2%. A visitor has no way to know that
+ * unless the site says so. Every other page reports what the model did; this is
+ * the only place that says what a good answer would even look like.
  *
  * Deliberately static: see the note in explainerData.js. The Dashboard and Model
  * pages remain the live view.
  */
+
+// One rhythm for the whole page. Prose needs more air than a dashboard does, and
+// the cards here carry paragraphs rather than numbers, so they are padded wider
+// than the shared default and spaced further apart.
+const CARD = { padding: space.xxl, marginBottom: space.xl };
+
 export default function Explainer() {
   return (
-    <div style={{ maxWidth: 820 }}>
-      <header style={{ marginBottom: space.xxl }}>
-        <div style={{ ...type.micro, color: C.slate400, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: space.sm }}>
+    <div style={{ maxWidth: 800 }}>
+      <header style={{ marginBottom: space.xxxl }}>
+        <div style={{
+          ...type.micro, color: C.slate400, letterSpacing: "0.12em",
+          textTransform: "uppercase", marginBottom: space.md,
+        }}>
           Understanding the predictions
         </div>
-        <h1 style={{ ...type.page, color: C.slate800, margin: 0, marginBottom: space.md }}>
+        <h1 style={{ ...type.page, color: C.slate800, margin: 0, marginBottom: space.lg }}>
           How good can a football model be?
         </h1>
-        <div style={{ ...type.body, fontSize: 15, color: C.slate600, maxWidth: "62ch" }}>
-          Almost everyone guesses too high. Here is the honest answer, measured over
-          1,140 real Premier League matches &mdash; and what happened when five
-          different approaches were tested against it.
+        <div style={{ ...type.body, fontSize: 15, lineHeight: 1.7, color: C.slate600, maxWidth: "62ch" }}>
+          Most people guess far too high. These figures come from 1,140 Premier
+          League matches, and from testing five different approaches against each
+          other.
         </div>
       </header>
 
-      <Card style={{ marginBottom: space.xl }}>
-        <SectionTitle level="primary" sub="Percentage of matches where the predicted result was correct, over the same 1,140 fixtures">
-          Start with the benchmark that matters
+      <Card style={CARD}>
+        <SectionTitle level="primary" sub="Share of the same 1,140 fixtures called correctly">
+          Start with the right benchmark
         </SectionTitle>
         <P>
-          A prediction model only means something next to something else. Against
-          nothing, 53% sounds mediocre. So four forecasters were scored on exactly
-          the same three seasons. One of them is the betting market&rsquo;s closing
-          line &mdash; the price bookmakers settle on right before kick-off, after
-          absorbing team news, injuries, suspensions and a great deal of informed
-          money. It is the closest thing football has to a ceiling.
+          A prediction model needs something to be compared against. On its own,
+          53% sounds poor. Next to the right numbers it looks quite different.
         </P>
-        <div style={{ margin: `${space.xl}px 0` }}>
+        <P>
+          We scored four forecasters on the same three seasons. One of them is the
+          betting market's closing line, the price bookmakers settle on just before
+          kick-off, after they have absorbed team news, injuries, weather and a lot
+          of well-informed money. It is about as close to a ceiling as football gets.
+        </P>
+
+        <div style={{ margin: `${space.xxl}px 0` }}>
           <AccuracyLadder />
         </div>
+
         <Pull value="0.6" unit=" pts">
-          The gap between this model and the entire global betting market. Not
-          twenty points. Not ten. Six tenths of one.
+          The gap between this model and the entire betting market. Not twenty
+          points. Not ten.
         </Pull>
+
         <P>
-          That reframes the question. The model is not failing to reach some
-          obvious higher number &mdash; it has effectively caught up with the
-          best-informed forecaster in the sport. What is left is not a modelling
-          problem. It is football being genuinely unpredictable.
+          So the model is not falling short of some obvious higher number. It has
+          more or less caught up with the best-informed forecaster in the sport.
+          What is left over is not a modelling problem. Football is simply hard to
+          predict.
         </P>
       </Card>
 
-      <Card style={{ marginBottom: space.xl }}>
-        <SectionTitle level="primary">Why 60% is not on the table</SectionTitle>
+      <Card style={CARD}>
+        <SectionTitle level="primary">Why 60% is out of reach</SectionTitle>
         <P>
-          If the bookmakers manage 54.2% with every advantage, a claim of 65% or
-          70% is not ambition &mdash; it is a mistake somewhere in the
-          measurement. Usually one of three: the model is answering an easier
-          question (predicting only &ldquo;home win or not&rdquo; collapses three
-          outcomes into two), it is measuring a lucky handful of matches, or
+          If the bookmakers manage 54.2% with every advantage available to them,
+          then 65% or 70% is not an ambitious target. It means something has gone
+          wrong in the measurement.
+        </P>
+        <P>
+          Usually it is one of three things. The model is answering an easier
+          question, since predicting only "home win or not" turns three outcomes
+          into two. Or it has been scored on a small, lucky run of matches. Or
           information from after the match has leaked into its inputs.
         </P>
         <P>
-          The honest caveat is that individual seasons swing far more than any
-          model does &mdash; and they take the market with them.
+          Season to season variation is much larger than the difference between any
+          two models, and it moves the market as well.
         </P>
-        <div style={{ margin: `${space.lg}px 0` }}>
+
+        <div style={{ margin: `${space.xl}px 0` }}>
           <DataTable
             columns={[
               { key: "season", header: "Season", nowrap: true },
@@ -88,62 +106,63 @@ export default function Explainer() {
             rowKey={(r) => r.season}
           />
         </div>
+
         <P>
-          When the model dropped ten points across two seasons the instinct was
-          that something had broken. Nothing had:{" "}
-          <strong>the market dropped by almost exactly the same amount, at the same
-          time.</strong> 2025-26 was simply a stranger season. A model&rsquo;s
-          trend line means very little until a benchmark sits beside it.
+          When the model dropped ten points across two seasons it looked like
+          something had broken. Nothing had. The market fell by almost exactly the
+          same amount over the same period. 2025-26 was simply a stranger season
+          than the two before it.
         </P>
       </Card>
 
-      <Card style={{ marginBottom: space.xl }}>
+      <Card style={CARD}>
         <SectionTitle level="primary" sub="One full holdout season, 380 matches">
           The draw problem
         </SectionTitle>
-        <div style={{ margin: `${space.lg}px 0` }}>
+
+        <div style={{ margin: `${space.lg}px 0 ${space.xxl}px` }}>
           <OutcomeSplit />
         </div>
+
         <P>
-          The reason is worth understanding, because it is counter-intuitive. The
-          model does not pick an outcome directly. It estimates{" "}
-          <em>how many goals each side will score</em>, works out the chance of
-          every possible scoreline, and reports which of the three results is most
-          likely.
+          The model does not pick an outcome directly. It estimates how many goals
+          each side will score, works out the chance of every possible scoreline,
+          then reports which of the three results comes out on top.
         </P>
         <P>
-          A draw needs both teams to land on the same number. Add up every way
-          that can happen &mdash; 0-0, 1-1, 2-2 and so on &mdash; and in a typical
-          fixture it comes to roughly <strong>26%</strong>. That is a sensible
-          estimate; draws really do happen about a quarter of the time. But a
-          clear favourite at home often sits at <strong>55%</strong> or more. So
-          the draw is frequently the second most likely outcome and almost never
-          the first.
+          For a draw, both teams have to land on the same number. Add up every way
+          that can happen, 0-0, 1-1, 2-2 and so on, and in a typical fixture it
+          comes to about 26%. That is a reasonable estimate. Draws really do happen
+          roughly a quarter of the time. But a strong home favourite will often sit
+          at 55% or higher, so the draw ends up second most likely and almost never
+          first.
         </P>
+
         <Aside label="The part that surprises people">
-          Never naming a draw is not a flaw. It is what a correctly calibrated
-          forecaster does. The bookmakers&rsquo; own prices behave the same way
-          &mdash; across thousands of matches, the market almost never makes the
-          draw its single most likely outcome either.
+          Never naming a draw is not a flaw. It is what a well-calibrated
+          forecaster does. The bookmakers' own prices behave the same way, and
+          across thousands of matches the market almost never makes the draw its
+          most likely single outcome.
         </Aside>
       </Card>
 
-      <Card style={{ marginBottom: space.xl }}>
-        <SectionTitle level="primary" sub="All six scored on the same holdout season; lower is better for log loss and RPS">
-          So we tried to fix it. Five ways.
+      <Card style={CARD}>
+        <SectionTitle level="primary" sub="All six scored on the same holdout season">
+          Five attempts to fix it
         </SectionTitle>
         <P>
-          Two of these columns are not accuracy, and they matter more.{" "}
-          <strong>Log loss</strong> and <strong>RPS</strong> measure whether the
-          probabilities are honest &mdash; whether something given a 70% chance
-          happens about 70% of the time. A model can pick more winners while being
-          badly overconfident about them, and these catch that.
+          Two of the columns below are not accuracy, and they matter more. Log loss
+          and RPS measure whether the probabilities are honest, so whether
+          something given a 70% chance actually happens about 70% of the time. A
+          model can pick more winners while being badly overconfident, and these
+          two pick that up. Lower is better for both.
         </P>
-        <div style={{ margin: `${space.lg}px 0` }}>
+
+        <div style={{ margin: `${space.xl}px 0` }}>
           <DataTable
             columns={[
               {
-                key: "name", header: "Approach", minWidth: 230,
+                key: "name", header: "Approach", minWidth: 240,
                 render: (r) => (
                   <span>
                     {r.name}
@@ -169,49 +188,52 @@ export default function Explainer() {
             rowStyle={(r) => (r.current ? { background: C.slate50 } : null)}
           />
         </div>
+
         <P>
-          <strong>Every alternative was worse.</strong> The model built to predict
-          results directly does call draws &mdash; fourteen of them &mdash; and
-          pays for it by being nearly three points less accurate, with noticeably
-          worse probabilities. The textbook statistical correction for exactly
-          this problem changed the result by 0.0001.
+          Every alternative came out worse. The version built to predict results
+          directly does call draws, fourteen of them, and is nearly three points
+          less accurate for it, with noticeably worse probabilities. The standard
+          statistical correction for this exact problem moved the result by 0.0001.
         </P>
         <P>
-          Which leaves an unusual conclusion: the most visible flaw in the model
-          is the one thing that should not be changed.
+          So the most visible flaw in the model turns out to be the one thing worth
+          leaving alone.
         </P>
       </Card>
 
-      <Card style={{ marginBottom: space.xl }}>
+      <Card style={CARD}>
         <SectionTitle level="primary">How to read a prediction</SectionTitle>
         <P>
-          A prediction of &ldquo;1-0&rdquo; is not a claim that the match will
-          finish 1-0. It is a compact way of saying the home side is more likely
-          to win than not. The number worth reading is the probability beside it.
-          A fixture at 55/26/19 and one at 38/28/34 may both display as a home
-          win, and they are completely different statements.
+          A prediction of "1-0" is not a claim that the match will finish 1-0. It
+          is shorthand for the home side being more likely to win than not. The
+          probabilities next to it carry the real information. A fixture at
+          55/26/19 and one at 38/28/34 can both show as a home win, and they are
+          saying very different things.
         </P>
+
         <Aside label="A fair test of any football model">
-          Ask what it is being compared against. Always picking the home team gets
-          you <strong>43%</strong> for free, and the bookmakers get{" "}
-          <strong>54%</strong>. Anything claiming to sit far outside that range
-          deserves a hard look at how it was measured.
+          Ask what it is being compared against. Always backing the home team gets
+          you 43% for nothing, and the bookmakers get 54%. Anything claiming to sit
+          well outside that range is worth a hard look at how it was measured.
         </Aside>
+
         <P>
-          Measured on that scale, a model at 53.6% is doing genuinely well. It is
-          not a crystal ball and was never going to be one. It is a well-calibrated
-          estimate of an event that remains, by its nature, mostly uncertain
-          &mdash; which is exactly why people still watch the matches.
+          On that scale, 53.6% is a good result. It was never going to be a crystal
+          ball. It is a reasonable estimate of something that stays largely
+          uncertain, which is most of why people watch.
         </P>
       </Card>
 
-      <div style={{ ...type.micro, fontWeight: 400, color: C.slate400, maxWidth: "70ch", lineHeight: 1.6 }}>
-        Figures measured in {MEASURED_ON} over three complete Premier League
-        seasons. The bookmaker comparison uses published closing prices on the
-        same fixtures. Alternative models were trained on 1,520 earlier matches
-        and scored on a season none of them had seen. These are a dated snapshot
-        of a specific study, not live telemetry &mdash; the Dashboard and Model
-        pages carry the current numbers.
+      <div style={{
+        ...type.micro, fontWeight: 400, color: C.slate400,
+        maxWidth: "72ch", lineHeight: 1.7, marginTop: space.xl,
+      }}>
+        Figures measured in {MEASURED_ON} across three complete Premier League
+        seasons. The bookmaker comparison uses published closing prices on the same
+        fixtures. The alternative models were trained on 1,520 earlier matches and
+        scored on a season none of them had seen. These are a snapshot from a
+        specific study rather than live figures. The Dashboard and Model pages
+        carry the current numbers.
       </div>
     </div>
   );

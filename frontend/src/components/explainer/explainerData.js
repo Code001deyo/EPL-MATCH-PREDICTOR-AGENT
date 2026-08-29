@@ -20,8 +20,8 @@ export const MEASURED_ON = "August 2026";
 // figure is the closing line on the same 1,140 fixtures, carried through the
 // backtest so the comparison is fixture-for-fixture rather than era-against-era.
 export const ACCURACY_LADDER = [
-  { label: "Bookmakers' closing line", value: 54.2, note: "the practical ceiling", emphasis: "peer" },
-  { label: "This model", value: 53.6, note: "0.6 points behind", emphasis: "subject" },
+  { label: "Bookmakers' closing line", value: 54.2, note: "about as close to a ceiling as football gets", emphasis: "peer" },
+  { label: "This model", value: 53.6, note: "0.6 points behind the market", emphasis: "subject" },
   { label: "Always pick the home team", value: 43.2, note: "free, no model needed", emphasis: "baseline" },
   { label: "Random guess", value: 33.3, note: "one in three", emphasis: "baseline" },
 ];

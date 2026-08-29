@@ -19,10 +19,11 @@ export function P({ children }) {
   return (
     <p style={{
       ...type.body,
-      fontSize: 14,
+      fontSize: 15,
+      lineHeight: 1.75,
       color: C.slate600,
-      maxWidth: "66ch",
-      margin: `0 0 ${space.md}px`,
+      maxWidth: "64ch",
+      margin: `0 0 ${space.lg}px`,
     }}>
       {children}
     </p>
@@ -37,8 +38,8 @@ export function Pull({ value, unit, children }) {
       display: "flex", gap: space.lg, alignItems: "center", flexWrap: "wrap",
       borderTop: `2px solid ${C.slate800}`,
       borderBottom: `1px solid ${C.slate200}`,
-      padding: `${space.lg}px 0`,
-      margin: `${space.xl}px 0`,
+      padding: `${space.xl}px 0`,
+      margin: `${space.xxl}px 0`,
     }}>
       <div style={{
         ...type.statLg, color: C.navy, flex: "none",
@@ -47,7 +48,7 @@ export function Pull({ value, unit, children }) {
         {value}
         {unit && <span style={{ fontSize: 18, fontWeight: 600 }}>{unit}</span>}
       </div>
-      <div style={{ ...type.body, fontSize: 14, color: C.slate600, flex: "1 1 18rem", minWidth: 0 }}>
+      <div style={{ ...type.body, fontSize: 15, lineHeight: 1.65, color: C.slate600, flex: "1 1 18rem", minWidth: 0 }}>
         {children}
       </div>
     </div>
@@ -64,8 +65,8 @@ export function Aside({ label, children }) {
       border: `1px solid ${C.slate200}`,
       borderLeft: `3px solid ${C.navy}`,
       borderRadius: `0 ${radius.md}px ${radius.md}px 0`,
-      padding: `${space.lg}px ${space.lg}px`,
-      margin: `${space.lg}px 0`,
+      padding: `${space.xl}px ${space.xl}px`,
+      margin: `${space.xl}px 0`,
       maxWidth: "70ch",
     }}>
       <div style={{
@@ -74,7 +75,7 @@ export function Aside({ label, children }) {
       }}>
         {label}
       </div>
-      <div style={{ ...type.body, fontSize: 14, color: C.slate700 }}>{children}</div>
+      <div style={{ ...type.body, fontSize: 15, lineHeight: 1.7, color: C.slate700 }}>{children}</div>
     </div>
   );
 }

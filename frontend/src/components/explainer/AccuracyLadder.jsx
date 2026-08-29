@@ -25,7 +25,7 @@ export default function AccuracyLadder() {
   return (
     <div>
       {ACCURACY_LADDER.map((row) => (
-        <div key={row.label} style={{ marginBottom: space.md }}>
+        <div key={row.label} style={{ marginBottom: space.lg }}>
           <div style={{
             display: "flex", justifyContent: "space-between",
             alignItems: "baseline", gap: space.md, marginBottom: 5,
@@ -48,10 +48,10 @@ export default function AccuracyLadder() {
 
           <div style={{
             background: C.slate100, borderRadius: radius.sm,
-            height: 22, width: "100%", overflow: "hidden",
+            height: 24, width: "100%", overflow: "hidden",
           }}>
             <div
-              title={`${row.label} — ${row.value.toFixed(1)}%, ${row.note}`}
+              title={`${row.label}: ${row.value.toFixed(1)}%, ${row.note}`}
               style={{
                 width: `${(row.value / MAX) * 100}%`,
                 height: "100%",

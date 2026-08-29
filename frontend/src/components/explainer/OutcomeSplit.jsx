@@ -36,14 +36,15 @@ export default function OutcomeSplit() {
 
       {/* The zero, stated in words. A missing bar cannot say this for itself. */}
       <div style={{
-        ...type.body, color: C.slate600, marginTop: space.md,
-        paddingTop: space.md, borderTop: `1px solid ${C.slate100}`,
+        ...type.body, fontSize: 14, lineHeight: 1.7, color: C.slate600,
+        marginTop: space.lg, paddingTop: space.lg,
+        borderTop: `1px solid ${C.slate100}`,
       }}>
         <strong style={{ color: C.rose }}>The draw column is empty.</strong>{" "}
-        Across all 380 matches the model named a draw zero times, and 104 of them
-        finished level — every one scored wrong before kick-off. That is a
-        consequence of the arithmetic, not a bug, and the section below explains
-        why removing it made the model measurably worse.
+        Across all 380 matches the model named a draw zero times. 104 of them
+        finished level, so every one was scored wrong before kick-off. This comes
+        out of the arithmetic rather than a bug, and the section below explains why
+        removing it made the model measurably worse.
       </div>
     </div>
   );
