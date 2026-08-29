@@ -3,6 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- The commit this bundle was built from. CRA substitutes %REACT_APP_*% in
+         this file at build time, so it costs nothing at runtime and is readable
+         with a plain curl.
+
+         It exists because "pushed" and "deployed" turned out to be different
+         things: on 2026-08-29 the Vercel project was found to be ten commits
+         behind, having last built on 24 August, and nothing served by the site
+         could say so. The backend answers the same question at /health. -->
+    <meta name="build-commit" content="%REACT_APP_COMMIT%" />
     <title>EPL Score Predictor</title>
   </head>
   <body>

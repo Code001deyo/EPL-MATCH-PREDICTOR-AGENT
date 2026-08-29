@@ -1,0 +1,141 @@
+name: Deploy frontend to Vercel
+
+# The frontend's deploy path, and the one that reports what happened.
+#
+# Vercel's git integration stopped building this project. Found on 2026-08-29:
+# its most recent production deployment was commit 6342c3d4 from 24 August, ten
+# commits behind main, with no error anywhere in GitHub. The backend's Render
+# integration had stalled the same way a day later, and the repo has no
+# repository webhooks at all - so both hosts had quietly stopped hearing about
+# pushes while both dashboards still described themselves as connected.
+#
+# Reconnecting the git integration in the Vercel dashboard is the root fix and
+# worth doing. This workflow is the safety net either way: it deploys from CI, so
+# "did the frontend ship?" is a green or red check next to the commit rather than
+# something discovered by noticing a missing page days later.
+#
+# Setup - one secret, in Settings > Secrets and variables > Actions:
+#
+#   VERCEL_TOKEN   https://vercel.com/account/tokens
+#
+# The org and project ids are repository *variables* rather than secrets: they
+# are identifiers, not credentials, and keeping them out of the workflow file
+# means nothing account-identifying is committed. They come from
+# frontend/.vercel/project.json, which is gitignored.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/deploy-vercel.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-vercel
+  cancel-in-progress: false
+
+env:
+  SITE: ${{ vars.SITE_BASE_URL }}
+  VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check configuration
+        working-directory: .
+        env:
+          TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          missing=""
+          [ -n "$TOKEN" ] || missing="$missing VERCEL_TOKEN(secret)"
+          [ -n "$VERCEL_ORG_ID" ] || missing="$missing VERCEL_ORG_ID(variable)"
+          [ -n "$VERCEL_PROJECT_ID" ] || missing="$missing VERCEL_PROJECT_ID(variable)"
+          [ -n "$SITE" ] || missing="$missing SITE_BASE_URL(variable)"
+          if [ -n "$missing" ]; then
+            echo "::error::Not configured:$missing"
+            echo "Create a token at https://vercel.com/account/tokens"
+            echo "The ids are in frontend/.vercel/project.json after 'vercel link'."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Report what Vercel last deployed
+        # Printed before deploying anything. When the git integration has stopped
+        # firing, this is the line that says how far behind production is - the
+        # question that took a page going missing to notice.
+        env:
+          TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          curl -sS --fail-with-body \
+            -H "Authorization: Bearer $TOKEN" \
+            "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_ORG_ID}&limit=5&target=production" \
+            > deployments.json
+          echo "Five most recent production deployments:"
+          jq -r '.deployments[] | "  \(.created / 1000 | todate)  \(.state)  \(.meta.githubCommitSha[0:8] // "-")  \(.meta.githubCommitMessage // "" | split("\n")[0])"' deployments.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        env:
+          # Stamped into the bundle so the deploy can be verified rather than
+          # assumed - see the meta tag in public/index.html. CRA inlines
+          # REACT_APP_* at build time, which is why this is set here and not at
+          # deploy time.
+          REACT_APP_COMMIT: ${{ github.sha }}
+          # Matches vercel.json, so a CI build and a dashboard build produce the
+          # same bundle rather than differing in source maps alone.
+          GENERATE_SOURCEMAP: "false"
+          CI: "true"
+        run: npm run build
+
+      - name: Deploy
+        env:
+          TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          # --prod targets production. The build above is reused rather than
+          # rebuilt on Vercel, so what was tested here is what ships.
+          npx --yes vercel@latest deploy build \
+            --prod --yes --token "$TOKEN" \
+            --archive=tgz > url.txt
+          echo "Deployed: $(cat url.txt)"
+
+      - name: Verify the site is serving this commit
+        # The step that would have caught a ten-commit-old frontend immediately.
+        #
+        # A 200 from /explainer proves nothing: vercel.json rewrites every
+        # non-/api path to index.html, so an unknown route returns the app shell
+        # with a 200 whether the page exists or not. That is exactly why a missing
+        # page went unnoticed. The meta tag is compared instead.
+        working-directory: .
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 20); do
+            live=$(curl -sS --max-time 30 "${SITE}/" \
+                   | grep -oE '<meta name="build-commit" content="[^"]*"' \
+                   | sed -E 's/.*content="([^"]*)".*/\1/' || true)
+            echo "[$i] serving commit: ${live:-<none>}"
+            if [ "$live" = "${GITHUB_SHA}" ]; then
+              echo "Verified: ${SITE} is serving ${GITHUB_SHA:0:8}."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::${SITE} is not serving ${GITHUB_SHA:0:8} five minutes after deploying."
+          echo "::error::If the tag is empty the live build pre-dates this check; re-run once."
+          exit 1
