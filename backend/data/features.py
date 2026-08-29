@@ -52,6 +52,22 @@ from .vector import (           # noqa: F401  (re-exported: this is the barrel)
 _FRAME_CACHE: dict = {}
 _FRAME_LOCK = threading.Lock()
 
+# The two point-in-time indexes, cached against that same signature.
+#
+# `build_feature_vector` takes `index` and `strength` precisely so a caller can
+# build them once and reuse them, and its docstring says each is a full pass over
+# history. The training path does share them across every fixture in the matrix.
+# The single-prediction path did not: it passed neither, so each request built a
+# fresh MatchHistory and a fresh StrengthIndex over the whole 11,222-row frame to
+# answer one fixture.
+#
+# Profiled on the seed snapshot, that was 90% of a prediction — StrengthIndex
+# 0.100s and MatchHistory 0.079s against 0.018s of actual model inference. On the
+# deployed instance, with a frame 1.7x larger and a throttled shared core, the
+# same shape of work took **10-12 seconds per prediction, warm**.
+_INDEX_CACHE: dict = {}
+_INDEX_LOCK = threading.Lock()
+
 
 def _data_signature(db: Session):
     return db.query(
@@ -65,6 +81,8 @@ def invalidate_match_cache():
     """Drop the cached frame. Call after any write that mutates existing rows."""
     with _FRAME_LOCK:
         _FRAME_CACHE.clear()
+    with _INDEX_LOCK:
+        _INDEX_CACHE.clear()
 
 
 def load_matches(db: Session) -> pd.DataFrame:
@@ -80,6 +98,37 @@ def load_matches(db: Session) -> pd.DataFrame:
         frame = _build_match_frame(db)
         _FRAME_CACHE["frame"] = (signature, frame)
         return frame
+
+
+def prediction_indexes(db: Session):
+    """`(MatchHistory, StrengthIndex)` over the whole frame, built once per dataset.
+
+    Keyed on the same signature as the frame itself, so the two cannot disagree:
+    anything that adds or extends a row moves the signature and rebuilds both, and
+    `invalidate_match_cache` clears them together for the enrichment case that
+    mutates rows without moving it.
+
+    **Only safe for a fixture that has not been played.** Both indexes are built
+    over every row in the frame, so they are correct for a caller whose cut-off is
+    later than every stored match — a live prediction, where "today" is after the
+    last result. A replayed historical fixture is cut off *inside* the frame and
+    must keep building its own index from a frame with that fixture removed, which
+    is what `routers/predict.py` does. The strictly-before window would exclude the
+    fixture's own row anyway; not sharing the index there means that guarantee does
+    not rest on the argument being right.
+    """
+    signature = _data_signature(db)
+    cached = _INDEX_CACHE.get("indexes")
+    if cached is not None and cached[0] == signature:
+        return cached[1], cached[2]
+    with _INDEX_LOCK:
+        cached = _INDEX_CACHE.get("indexes")
+        if cached is not None and cached[0] == signature:
+            return cached[1], cached[2]
+        frame = load_matches(db)
+        index, strength = MatchHistory(frame), StrengthIndex(frame)
+        _INDEX_CACHE["indexes"] = (signature, index, strength)
+        return index, strength
 
 
 def _build_match_frame(db: Session) -> pd.DataFrame:

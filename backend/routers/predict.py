@@ -8,10 +8,8 @@ import json
 from db.database import get_db, Prediction, MatchResult
 from db.teams import is_top_flight
 from ratelimit import limit
-import pandas as pd
 
-from data.features import load_matches, build_feature_vector
-from data.odds import upcoming_odds
+from data.features import load_matches, build_feature_vector, prediction_indexes
 from data.ingestion import _current_season_label
 from models.ml_model import predict, get_feature_importance
 
@@ -81,29 +79,37 @@ def predict_fixture(req: PredictRequest, request: Request, db: Session = Depends
     if req.fixture_id is not None:
         df = df[df["id"] != req.fixture_id]
 
-    # The fixture's own pre-match price, if a bookmaker has published one. The
+    # No odds are fetched here, and that is deliberate rather than an omission.
+    #
+    # This block used to call `upcoming_odds()` — a live network request to the
+    # fixtures feed — on every prediction, justified by a comment claiming "the
     # model is trained with odds among its features, so omitting them here would
-    # leave it guessing on its strongest input at exactly the moment it is asked
-    # to work. Two places to look, in order:
+    # leave it guessing on its strongest input". That claim was false by the time
+    # it was read: `FEATURE_COLS` lists 55 columns and not one of them is an odds
+    # column. Odds were deliberately dropped as features (see the long note in
+    # `models/ml_model.py`), so the request bought a set of columns the model
+    # never reads, behind a lock held across the fetch.
     #
-    #   1. the stored row, when this fixture is already in the database with a
-    #      closing price attached (a replayed or historical prediction);
-    #   2. the live upcoming-fixtures feed, for a match not yet played.
+    # Odds are still ingested and stored — they are the market benchmark the
+    # backtest reports the model against, which is the job they now do.
     #
-    # Neither is required. `upcoming_odds` swallows its own network failures and
-    # a missing price becomes NaN features, which the model handles as a real
-    # condition rather than a fabricated even-money prior.
-    odds = None
-    stored = df[(df["home_team"] == home_team) & (df["away_team"] == away_team)]
-    if not stored.empty:
-        row = stored.iloc[-1]
-        if pd.notna(row.get("odds_home")):
-            odds = (row.get("odds_home"), row.get("odds_draw"), row.get("odds_away"))
-    if odds is None:
-        odds = upcoming_odds(home_team, away_team)
+    # `build_feature_vector` still fills its odds columns with NaN, exactly as it
+    # did whenever a price was unavailable, and the model handles them natively.
+
+    # A live fixture is cut off after every stored match, so the shared index is
+    # correct for it and costs nothing to reuse. A replayed historical fixture is
+    # cut off inside the frame, and keeps building its own from the frame with
+    # that fixture removed — see `prediction_indexes`.
+    if req.fixture_id is None:
+        index, strength = prediction_indexes(db)
+    else:
+        index = strength = None
 
     try:
-        features = build_feature_vector(df, home_team, away_team, predict_date, odds=odds)
+        features = build_feature_vector(
+            df, home_team, away_team, predict_date,
+            strength=strength, index=index,
+        )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
