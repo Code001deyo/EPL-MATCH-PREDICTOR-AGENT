@@ -5,6 +5,23 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from main import app
+from db.database import init_db
+
+# Create the schema before any request is made.
+#
+# `main.py` calls init_db() from an on_event("startup") handler, and a
+# module-level `TestClient(app)` never fires startup — that only happens when the
+# client is used as a context manager. So every endpoint that touched a table
+# raised "no such table: match_results" and four of these tests failed on a clean
+# checkout. CI has been red on every commit since 2026-08-24 for this reason
+# alone, which meant the suite was not gating anything: a genuine regression would
+# have looked exactly like the failure that was already there.
+#
+# The tables are wanted empty, not seeded. These tests assert the *shape* of a
+# response — that /teams answers 200 with a "teams" key — and an empty database is
+# the honest case for that: it is what a freshly deployed instance serves before
+# ingestion finishes, and the endpoints are supposed to cope with it.
+init_db()
 
 client = TestClient(app)
 
