@@ -41,3 +41,29 @@ Thumbs.db
 
 # Docker
 *.log
+
+# Secrets and local host links. `.env` alone missed every variant, and .vercel was
+# only ignored under frontend/, so a `vercel link` at the repo root would have
+# committed the org and project ids. This repo is public: the rule is that
+# anything describing *this* deployment stays out of it.
+.env.*
+!.env.example
+.vercel/
+*.pem
+*.key
+!frontend/**/*.key
+
+# Runtime state. backend/dbdata/ is the container's live database and is created
+# by any local run or a bare `docker run` with a bind mount; it is not the
+# committed snapshot in backend/seed/.
+backend/dbdata/
+*.sqlite
+*.sqlite3
+
+# Saved third-party pages. pl_page.html was a scraping reference that sat in the
+# repo unreferenced for months and carried three of the Premier League's own
+# frontend API keys, including a Google one. Republishing someone else's keys is
+# not ours to do, so saved pages stay local.
+pl_page.html
+*_page.html
+scratch/
