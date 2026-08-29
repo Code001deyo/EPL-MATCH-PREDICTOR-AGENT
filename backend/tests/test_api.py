@@ -32,6 +32,24 @@ def test_health():
     assert r.json()["status"] == "ok"
 
 
+def test_health_reports_the_running_commit(monkeypatch):
+    """/health must say which code is answering.
+
+    The deploy workflow compares this against the SHA it pushed. Without it,
+    "deployed" and "restarted" are indistinguishable from outside — which is how
+    two pushes sat undeployed for an hour on 2026-08-29 while a CPU-variance
+    latency reading was mistaken for the new code working.
+    """
+    monkeypatch.setenv("RENDER_GIT_COMMIT", "abc123def456")
+    assert client.get("/health").json()["commit"] == "abc123def456"
+
+
+def test_health_commit_is_unknown_when_unset(monkeypatch):
+    """Absent means absent — never a value that reads as a real answer."""
+    monkeypatch.delenv("RENDER_GIT_COMMIT", raising=False)
+    assert client.get("/health").json()["commit"] == "unknown"
+
+
 def test_get_teams():
     r = client.get("/teams")
     assert r.status_code == 200

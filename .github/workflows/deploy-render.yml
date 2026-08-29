@@ -1,0 +1,182 @@
+name: Deploy to Render
+
+# The primary deploy path, and the one that reports what happened.
+#
+# render.yaml sets `autoDeploy: true`, and its comment says every push to main
+# redeploys. On 2026-08-29 that silently stopped being true: two pushes to main
+# did not deploy at all, CI was green, and there was no signal anywhere in GitHub
+# that the running service was an hour behind the branch. The failure mode is the
+# one this project keeps finding - not something that errors, but something that
+# looks exactly like success.
+#
+# Driving the deploy from here fixes the visibility rather than the mechanism:
+# Render's own auto-deploy can stay on, and this run is what turns "did it ship?"
+# into a green or red check next to the commit. Triggering a deploy for a commit
+# Render has already deployed is cheap and idempotent.
+#
+# Setup - one secret, in Settings > Secrets and variables > Actions:
+#
+#   RENDER_API_KEY   Render dashboard > Account Settings > API Keys > Create
+#
+# The service id is discovered by name, so there is nothing else to configure and
+# nothing to go stale if the service is recreated. Set the RENDER_SERVICE_ID
+# repository *variable* to skip the lookup if you would rather pin it.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "render.yaml"
+      - ".github/workflows/deploy-render.yml"
+  workflow_dispatch:
+
+concurrency:
+  # Never two deploys of the same service in flight: Render would queue them and
+  # the older build could land last.
+  group: deploy-render
+  cancel-in-progress: false
+
+env:
+  SERVICE_NAME: epl-predictor-api
+  API: ${{ vars.API_BASE_URL }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check configuration
+        env:
+          KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::RENDER_API_KEY is not set. Add it under Settings > Secrets and variables > Actions."
+            echo "Create one at https://dashboard.render.com/u/settings#api-keys"
+            exit 1
+          fi
+          test -n "$API" || { echo "::error::repository variable API_BASE_URL is not set"; exit 1; }
+
+      - name: Resolve the service id
+        id: svc
+        env:
+          KEY: ${{ secrets.RENDER_API_KEY }}
+          PINNED: ${{ vars.RENDER_SERVICE_ID }}
+        run: |
+          set -euo pipefail
+          if [ -n "$PINNED" ]; then
+            echo "id=$PINNED" >> "$GITHUB_OUTPUT"
+            echo "Using pinned service id $PINNED"
+            exit 0
+          fi
+          # `name=` is a prefix match, so the exact name is re-checked below rather
+          # than trusting the first row back.
+          curl -sS --fail-with-body \
+            -H "Authorization: Bearer $KEY" \
+            "https://api.render.com/v1/services?name=${SERVICE_NAME}&limit=20" > services.json
+          id=$(jq -r --arg n "$SERVICE_NAME" \
+                 '[.[].service | select(.name == $n)][0].id // empty' services.json)
+          if [ -z "$id" ]; then
+            echo "::error::No Render service named '${SERVICE_NAME}' is visible to this API key."
+            jq -r '.[].service | "  seen: \(.name) (\(.id))"' services.json || true
+            exit 1
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          echo "Resolved ${SERVICE_NAME} -> $id"
+
+      - name: Report what Render currently thinks
+        # Printed before triggering anything. When a deploy has been failing
+        # quietly, this is the line that says so - and it is the answer to the
+        # question that took an hour of guessing on 2026-08-29.
+        env:
+          KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          set -euo pipefail
+          curl -sS --fail-with-body \
+            -H "Authorization: Bearer $KEY" \
+            "https://api.render.com/v1/services/${{ steps.svc.outputs.id }}/deploys?limit=5" > deploys.json
+          echo "Five most recent deploys:"
+          jq -r '.[].deploy | "  \(.createdAt)  \(.status)  \(.commit.id[0:8] // "-")  \(.commit.message // "" | split("\n")[0])"' deploys.json
+          echo
+          echo "autoDeploy setting:"
+          curl -sS --fail-with-body \
+            -H "Authorization: Bearer $KEY" \
+            "https://api.render.com/v1/services/${{ steps.svc.outputs.id }}" \
+            | jq -r '"  autoDeploy=\(.autoDeploy)  branch=\(.branch)  suspended=\(.suspended)"'
+
+      - name: Trigger the deploy
+        id: trigger
+        env:
+          KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          set -euo pipefail
+          # clearCache=do_not_clear keeps the pip cache mount, so the 297 MB
+          # xgboost wheel is not re-downloaded on every deploy.
+          curl -sS --fail-with-body -X POST \
+            -H "Authorization: Bearer $KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache":"do_not_clear"}' \
+            "https://api.render.com/v1/services/${{ steps.svc.outputs.id }}/deploys" > deploy.json
+          id=$(jq -r '.id' deploy.json)
+          test -n "$id" && test "$id" != "null" || { echo "::error::Render did not return a deploy id"; cat deploy.json; exit 1; }
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          echo "Deploy $id started for commit ${GITHUB_SHA:0:8}"
+
+      - name: Wait for the build
+        env:
+          KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          set -euo pipefail
+          # A free-tier build of this image runs several minutes; 30 is the ceiling
+          # before something is wrong rather than slow.
+          for i in $(seq 1 60); do
+            status=$(curl -sS --fail \
+              -H "Authorization: Bearer $KEY" \
+              "https://api.render.com/v1/services/${{ steps.svc.outputs.id }}/deploys/${{ steps.trigger.outputs.id }}" \
+              | jq -r '.status')
+            echo "[$i] $status"
+            case "$status" in
+              live)
+                echo "Build finished and the service is live."
+                exit 0 ;;
+              # Every terminal state is enumerated. A case that only matched
+              # success would sit here silently through a failed build until the
+              # loop ran out, and report a timeout instead of the real reason.
+              build_failed|update_failed|canceled|deactivated|pre_deploy_failed)
+                echo "::error::Render deploy ended as '$status'. Open the service's Events tab for the build log."
+                exit 1 ;;
+            esac
+            sleep 30
+          done
+          echo "::error::Deploy did not reach a terminal state within 30 minutes."
+          exit 1
+
+      - name: Verify the running code is this commit
+        # The step that would have caught the 2026-08-29 failure immediately.
+        #
+        # "The deploy succeeded" and "the code answering requests is the code I
+        # pushed" are different claims, and only the second one matters. /health
+        # reports the SHA its image was built from, so this compares rather than
+        # infers. Do not substitute a latency or behaviour check here: the free
+        # instance's burstable CPU moves the same endpoint between 1.5s and 12s,
+        # which is larger than most changes being verified.
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 20); do
+            body=$(curl -sS --max-time 30 "${API}/health" || true)
+            live=$(echo "$body" | jq -r '.commit // "unknown"' 2>/dev/null || echo unknown)
+            echo "[$i] serving commit: $live"
+            if [ "$live" = "${GITHUB_SHA}" ]; then
+              echo "Verified: ${API} is serving ${GITHUB_SHA:0:8}."
+              exit 0
+            fi
+            # An older image has no `commit` field at all. Once this workflow has
+            # deployed once, that stops being possible - so it is a transitional
+            # state, not a pass.
+            if [ "$live" = "unknown" ]; then
+              echo "  (no commit field yet - pre-dates this check)"
+            fi
+            sleep 15
+          done
+          echo "::error::${API} is not serving ${GITHUB_SHA:0:8} five minutes after the deploy reported live."
+          echo "::error::The deploy succeeded but the running code is not this commit. Check the Events tab."
+          exit 1

@@ -182,6 +182,32 @@ changing it means rebuilding the image, not restarting it.
 
 ---
 
+## Deploying
+
+Backend → **Render** (`render.yaml`), database → **Neon**, frontend → **Vercel**.
+The Hugging Face path in `deploy-backend.yml` is dead — Docker Spaces need PRO.
+
+`autoDeploy: true` is set, but **do not trust it**. On 2026-08-29 two pushes to
+main did not deploy at all, with CI green and nothing anywhere in GitHub saying
+so. `.github/workflows/deploy-render.yml` now drives the deploy through the
+Render API, prints the last five deploys and the service's `autoDeploy` flag
+before it starts, fails on every terminal build state rather than only timing
+out, and then **verifies the running code is the commit that was pushed**.
+
+It needs one secret: `RENDER_API_KEY` (Render dashboard → Account Settings → API
+Keys). The service id is discovered by name.
+
+**Never infer whether a deploy landed from latency or behaviour.** The free
+instance is burstable: the same unchanged endpoint measured 10.6s, then 1.5s,
+then 7–9.5s inside one hour, which is a larger swing than most changes being
+verified. Ask `/health` instead — it reports `commit`, the SHA its image was
+built from, and `unknown` when the variable is absent.
+
+**A redeploy resets the models.** The free tier has no persistent disk, so
+`entrypoint.sh` restores the baked `backend/seed/` models onto empty storage —
+which means a deploy silently reverts any retrain done since the image was
+built. Match data is safe in Neon. Run `retrain-model.yml` after a deploy.
+
 ## Verification
 
 ```bash

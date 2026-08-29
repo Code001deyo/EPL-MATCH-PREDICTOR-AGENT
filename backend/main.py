@@ -92,8 +92,28 @@ def startup():
 
 @app.get("/health")
 def health():
-    """Liveness: the process is serving. Says nothing about data being loaded."""
-    return {"status": "ok"}
+    """Liveness: the process is serving. Says nothing about data being loaded.
+
+    `commit` is the git SHA the running image was built from, so a caller can ask
+    *which code is answering* rather than inferring it.
+
+    That question was not answerable before, and the gap caused a real false
+    conclusion on 2026-08-29: two pushes to main did not deploy, CI was green, and
+    a latency improvement measured on the live instance was reported as delivered
+    by the new code. It was not — the free instance's burstable CPU had produced
+    10.6s, then 1.5s, then 7-9.5s for the same unchanged endpoint within an hour.
+    Nothing served by the API distinguished "deployed" from "restarted", so the
+    only evidence available was a number that varies by more than most fixes.
+
+    Render injects RENDER_GIT_COMMIT into every service it builds from a repo.
+    `unknown` means the variable is absent — running locally, or under a host that
+    does not set it — and is reported honestly rather than defaulted to something
+    that would read as a real answer.
+    """
+    return {
+        "status": "ok",
+        "commit": os.environ.get("RENDER_GIT_COMMIT", "unknown"),
+    }
 
 
 @app.get("/health/ready")
