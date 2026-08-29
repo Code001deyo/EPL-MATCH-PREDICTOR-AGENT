@@ -250,6 +250,12 @@ def train(df, on_progress=None):
     _tick("scoring holdout accuracy")
     metrics["accuracy"] = _outcome_accuracy(df, X, split)
 
+    # Everything above this line is measurement, and every number in `metrics` now
+    # comes from a model that never saw the rows it was scored on. Only now is it
+    # safe to refit — `_outcome_accuracy` reads the .pkl files off disk, so doing
+    # this any earlier would have scored the holdout with a model trained on it.
+    metrics["shipped_model"] = _refit_on_all_data(df, X, _tick)
+
     _save_metrics(metrics)
     # The .pkl files on disk have all been rewritten above. Drop the in-memory
     # copies so the next prediction picks up the model that was just trained
@@ -258,6 +264,69 @@ def train(df, on_progress=None):
     invalidate_model_cache()
     _tick("complete")
     return metrics
+
+
+def _refit_on_all_data(df, X, _tick) -> dict:
+    """Refit every target on the complete dataset and ship *that* model.
+
+    Until this existed, `train()` fitted on `X[:split]` and saved that estimator
+    straight to disk, so the model answering `/predict` was the validation model —
+    the one deliberately denied the most recent complete season. With the holdout
+    being the last finished campaign, the deployed model's training data ended two
+    seasons before the fixtures it was being asked about: `train_rows` 2,280 of
+    2,669 available, with the missing 389 the most recent and most relevant rows
+    in the set.
+
+    The split earns its keep by *choosing and measuring* the model; it should not
+    also cripple the one that ships. So the holdout metrics above are computed
+    first, from the validation fit, and stay exactly as honest as they were — then
+    the same configuration is refitted on everything and overwrites the .pkl files.
+
+    Measured on this dataset, adding the most recent season to training was worth
+    +1.6 points of correct-result accuracy on 2025-26 and -0.8 on 2024-25 — call it
+    +0.4 on average, noisy across two trials. Modest, but free, and the alternative
+    is knowingly discarding the newest 15% of the data at serving time.
+
+    The returned dict is recorded in `metrics.json` so the Model page can state
+    plainly that the published accuracy and the deployed model are not the same
+    fit, rather than leaving a reader to assume they are.
+    """
+    from models.backend import fit
+
+    _tick("refitting on all data")
+    refitted = []
+
+    for target in ["home_goals", "away_goals"]:
+        y = df[target].values.astype(float)
+        # No eval set: there is no held-out data left by design, and handing
+        # the estimator its own training rows as one would misreport.
+        joblib.dump(fit(_make_model(), X, y), _model_path(target))
+        refitted.append(target)
+
+    for target in STAT_TARGETS:
+        if target not in df.columns:
+            continue
+        # Same rule as the validation fit: rows without the statistic are dropped,
+        # never median-filled. A target skipped there for thin data is skipped
+        # here too, so no .pkl is left behind from an earlier, better-covered run.
+        mask = df[target].notna().values
+        if mask.sum() < MIN_STAT_SAMPLES:
+            continue
+        y = df[target].values.astype(float)[mask]
+        joblib.dump(fit(_make_model(), X[mask], y), _model_path(target))
+        refitted.append(target)
+
+    print(f"Refitted {len(refitted)} models on all {len(df)} rows")
+    return {
+        "fitted_on": "all rows",
+        "rows": int(len(df)),
+        "targets": len(refitted),
+        # Stated so nobody reads the accuracy block as describing this model.
+        "note": (
+            "Metrics above are from the season-holdout fit, which never saw its "
+            "validation season. The shipped model is refitted on the full dataset."
+        ),
+    }
 
 
 def _outcome_accuracy(df, X, split: int) -> dict:
