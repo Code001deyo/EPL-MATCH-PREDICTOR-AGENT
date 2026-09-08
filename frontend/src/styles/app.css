@@ -1,0 +1,455 @@
+/* The app's first stylesheet.
+ *
+ * Everything here was previously an inline style object, which cannot express
+ * the four things this file exists for: media queries, :hover and :focus-visible,
+ * fluid type via clamp(), and prefers-reduced-motion. Those were not omitted by
+ * choice — inline styles simply have no syntax for them, so the app had no hover
+ * states, no keyboard focus ring, and layouts that squeezed rather than reflowed.
+ *
+ * theme.js stays the single source of truth for colour. The tokens below are
+ * copied from it deliberately rather than injected at runtime: a stylesheet that
+ * needs JavaScript to have colours flashes unstyled on first paint. If a value
+ * changes in theme.js it changes here too — the pairing is asserted nowhere, so
+ * it is written down here instead.
+ */
+
+:root {
+  /* Premier League brand */
+  --pl-purple: #37003c;
+  --pl-purple-light: #4d0052;
+  --pl-green: #00ff85;
+  --pl-green-dark: #00b368;
+  --pl-red: #e8003d;
+
+  /* Neutrals */
+  --slate-50: #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --white: #ffffff;
+
+  /* Semantic — judge a number, never decorate a chart */
+  --good: #2f8f5b;
+  --warn: #a4650f;
+  --bad: #b3123a;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+/* --- accessibility floor ------------------------------------------------ */
+
+/* A keyboard user could not previously see where they were. :focus-visible
+   rather than :focus so a mouse click does not leave a ring behind. */
+:focus-visible {
+  outline: 3px solid var(--pl-green-dark);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Every interactive element must be reachable by thumb. 44px is the smallest
+   target that reliably is. */
+button,
+a[role="button"],
+.pl-tap {
+  min-height: 44px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Read by screen readers, invisible on screen. Used to give a probability bar a
+   text equivalent — colour and width alone say nothing to a screen reader, and
+   several clubs share a palette. */
+.pl-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- masthead ----------------------------------------------------------- */
+
+.pl-masthead {
+  background: linear-gradient(135deg, var(--pl-purple) 0%, #2b0030 100%);
+  color: var(--white);
+  border-radius: var(--radius-lg);
+  padding: clamp(20px, 4vw, 32px);
+  margin-bottom: 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* The green edge is the strongest single brand signal the league has. */
+.pl-masthead::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--pl-green) 0%, #00d4ff 100%);
+}
+
+.pl-masthead h1 {
+  margin: 0 0 6px;
+  /* Fluid rather than stepped: the title is the one element that has to look
+     deliberate at 320px and at 1920px without a breakpoint in between. */
+  font-size: clamp(1.375rem, 1rem + 1.8vw, 2.25rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.pl-masthead p {
+  margin: 0;
+  color: #e9d5ff;
+  font-size: clamp(0.8125rem, 0.75rem + 0.3vw, 0.9375rem);
+  line-height: 1.6;
+  max-width: 60ch;
+}
+
+.pl-masthead-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-top: 16px;
+  font-size: 0.75rem;
+  color: #d8b4fe;
+}
+
+.pl-masthead-meta strong {
+  color: var(--white);
+  font-weight: 700;
+}
+
+/* --- fixture cards ------------------------------------------------------ */
+
+.pl-fixture-grid {
+  display: grid;
+  /* auto-fill with a minimum rather than fixed column counts: one rule covers
+     every width from a phone to a wide desktop, and nothing squeezes. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 16px;
+}
+
+.pl-fixture {
+  background: var(--white);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.pl-fixture:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.pl-fixture-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--slate-500);
+}
+
+.pl-fixture-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pl-fixture-side span {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--slate-800);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pl-fixture-score {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  font-size: 1.125rem;
+  color: var(--pl-purple);
+}
+
+/* --- probability bar ---------------------------------------------------- */
+
+.pl-probbar {
+  display: flex;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--slate-100);
+}
+
+.pl-probbar > i {
+  display: block;
+  height: 100%;
+}
+
+.pl-probbar-key {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--slate-500);
+}
+
+/* --- title race --------------------------------------------------------- */
+
+.pl-race-row {
+  display: grid;
+  /* rank | crest+name | bar | probability | delta */
+  grid-template-columns: 1.75rem minmax(0, 1fr) minmax(0, 2fr) 3.5rem 4rem;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--slate-100);
+}
+
+.pl-race-row:last-child {
+  border-bottom: none;
+}
+
+.pl-race-rank {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--slate-400);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.pl-race-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--slate-800);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pl-race-name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pl-race-track {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--slate-100);
+  overflow: hidden;
+}
+
+.pl-race-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.pl-race-prob {
+  font-size: 0.9375rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--pl-purple);
+  text-align: right;
+}
+
+.pl-race-delta {
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Below the medium breakpoint the bar column is the one that has to go: the
+   name and the number are the information, the bar is the illustration. */
+@media (max-width: 720px) {
+  .pl-race-row {
+    grid-template-columns: 1.5rem minmax(0, 1fr) 3.25rem 3.5rem;
+  }
+
+  .pl-race-track-cell {
+    display: none;
+  }
+}
+
+/* --- tables that become cards ------------------------------------------ */
+
+/* A wide table on a narrow screen either scrolls sideways or gets crushed.
+   Below 720px each row becomes its own block with the column name as a label,
+   which reads properly on a phone. */
+@media (max-width: 720px) {
+  .pl-stack-table thead {
+    display: none;
+  }
+
+  .pl-stack-table,
+  .pl-stack-table tbody,
+  .pl-stack-table tr,
+  .pl-stack-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .pl-stack-table tr {
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius-md);
+    margin-bottom: 10px;
+    padding: 8px 12px;
+    background: var(--white);
+  }
+
+  .pl-stack-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 0;
+    border: none;
+    text-align: right;
+  }
+
+  .pl-stack-table td::before {
+    content: attr(data-label);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--slate-500);
+    text-align: left;
+  }
+}
+
+/* Anything genuinely wide scrolls inside its own box, never the page body. */
+.pl-scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* --- subscribe ---------------------------------------------------------- */
+
+.pl-subscribe {
+  background: linear-gradient(135deg, var(--pl-purple) 0%, #4a0052 100%);
+  color: var(--white);
+  border-radius: var(--radius-lg);
+  padding: clamp(20px, 3vw, 28px);
+}
+
+.pl-subscribe h2 {
+  margin: 0 0 8px;
+  font-size: 1.125rem;
+}
+
+.pl-subscribe p {
+  margin: 0 0 16px;
+  color: #e9d5ff;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  max-width: 52ch;
+}
+
+.pl-subscribe-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pl-subscribe input {
+  flex: 1 1 16rem;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--white);
+  font-size: 0.875rem;
+  font-family: inherit;
+}
+
+.pl-subscribe input::placeholder {
+  color: #c4b5fd;
+}
+
+.pl-subscribe button {
+  flex: 0 0 auto;
+  padding: 0 22px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--pl-green);
+  color: var(--pl-purple);
+  font-weight: 700;
+  font-size: 0.875rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.pl-subscribe button:hover:not(:disabled) {
+  background: #4dffab;
+}
+
+.pl-subscribe button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.pl-subscribe-note {
+  margin: 12px 0 0;
+  font-size: 0.75rem;
+  color: #c4b5fd;
+}
+
+/* On the narrowest screens the button takes the full width rather than sitting
+   as a stub beside a wrapped input. */
+@media (max-width: 420px) {
+  .pl-subscribe button {
+    flex: 1 1 100%;
+  }
+}
+
+/* --- caveat note -------------------------------------------------------- */
+
+.pl-caveat {
+  border-left: 3px solid var(--slate-300);
+  padding: 2px 0 2px 12px;
+  margin: 16px 0 0;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--slate-500);
+  max-width: 70ch;
+}

@@ -13,7 +13,8 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build"
+    "build": "react-scripts build",
+    "test": "react-scripts test"
   },
   "proxy": "http://localhost:8001",
   "browserslist": {
@@ -27,5 +28,14 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "jest": {
+    "moduleNameMapper": {
+      "^axios$": "axios/dist/node/axios.cjs"
+    }
+  },
+  "devDependencies": {
+    "@testing-library/react": "^14.3.1",
+    "@testing-library/jest-dom": "^6.4.8"
   }
 }

@@ -13,6 +13,7 @@ import UpcomingFixtures from "../components/dashboard/UpcomingFixtures";
 import LeagueTable from "../components/dashboard/LeagueTable";
 import RecentPredictions from "../components/dashboard/RecentPredictions";
 import DataProvenance from "../components/DataProvenance";
+import SubscribeCard from "../components/SubscribeCard";
 
 /* A dashboard is read in one glance, then interrogated by scrolling.
  *
@@ -128,6 +129,13 @@ export default function Dashboard() {
       }}>
         <AccuracyTrend />
         <CalibrationPanel />
+      </div>
+
+      {/* Sign-up sits after the two charts that establish whether the model is
+          worth following, and before the detail. Asking for an address above the
+          evidence would be asking before the reader has any reason to say yes. */}
+      <div style={{ marginBottom: space.xl }}>
+        <SubscribeCard />
       </div>
 
       {/* ---- below the fold ---- */}

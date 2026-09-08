@@ -53,6 +53,15 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      # A successful build says the code compiles. It says nothing about a
+      # component that compiles and then throws on first render, which in a
+      # client-rendered app is a blank white page rather than a visible error.
+      - name: Run tests
+        working-directory: frontend
+        env:
+          CI: true
+        run: npm test -- --watchAll=false
+
       - name: Build
         working-directory: frontend
         # CRA warnings are not failures here, but they are visible in the log.

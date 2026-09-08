@@ -25,46 +25,12 @@ from db.database import MatchResult
 from db.fixtures import Fixture
 from db.race import KIND_BACKFILL, save_snapshot
 from models import season_sim
+from models.league_table import build_table
 
 
 def _table_after(db, season: str, matchweek: int, division: str = "E0") -> dict[str, dict]:
-    """The league table counting only matches up to and including `matchweek`."""
-    rows = (
-        db.query(MatchResult)
-        .filter(MatchResult.season == season,
-                MatchResult.division == division,
-                MatchResult.matchweek <= matchweek)
-        .all()
-    )
-
-    table: dict[str, dict] = {}
-
-    def entry(team):
-        return table.setdefault(team, {
-            "team": team, "points": 0, "played": 0, "scored": 0, "conceded": 0,
-        })
-
-    for row in rows:
-        if row.home_goals is None or row.away_goals is None:
-            continue
-        home, away = entry(row.home_team), entry(row.away_team)
-        home["played"] += 1
-        away["played"] += 1
-        home["scored"] += row.home_goals
-        home["conceded"] += row.away_goals
-        away["scored"] += row.away_goals
-        away["conceded"] += row.home_goals
-        if row.home_goals > row.away_goals:
-            home["points"] += 3
-        elif row.away_goals > row.home_goals:
-            away["points"] += 3
-        else:
-            home["points"] += 1
-            away["points"] += 1
-
-    for value in table.values():
-        value["goal_difference"] = value["scored"] - value["conceded"]
-    return table
+    """The table counting only matches up to and including `matchweek`."""
+    return build_table(db, season, division, up_to_matchweek=matchweek)
 
 
 def _all_fixture_rates(db, season: str, on_progress=None):

@@ -29,8 +29,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from db.database import MatchResult
 from db.fixtures import Fixture
+from models.league_table import build_table
 
 # 10,000 seasons puts the Monte Carlo standard error on a mid-range probability
 # at about 0.5 percentage points — comfortably finer than the whole-percent the
@@ -46,46 +46,8 @@ RELEGATION_PLACES = 3
 
 
 def current_table(db, season: str, division: str = "E0") -> dict[str, dict]:
-    """Points, goal difference and games played, from actual results only.
-
-    Built from `match_results` rather than an analytics endpoint so the simulation
-    and the table it starts from cannot disagree. Unplayed rows are excluded: a
-    fixture with no score is not a 0-0 draw.
-    """
-    rows = (
-        db.query(MatchResult)
-        .filter(MatchResult.season == season, MatchResult.division == division)
-        .all()
-    )
-
-    table: dict[str, dict] = {}
-
-    def entry(team):
-        return table.setdefault(team, {
-            "team": team, "points": 0, "played": 0, "scored": 0, "conceded": 0,
-        })
-
-    for row in rows:
-        if row.home_goals is None or row.away_goals is None:
-            continue
-        home, away = entry(row.home_team), entry(row.away_team)
-        home["played"] += 1
-        away["played"] += 1
-        home["scored"] += row.home_goals
-        home["conceded"] += row.away_goals
-        away["scored"] += row.away_goals
-        away["conceded"] += row.home_goals
-        if row.home_goals > row.away_goals:
-            home["points"] += 3
-        elif row.away_goals > row.home_goals:
-            away["points"] += 3
-        else:
-            home["points"] += 1
-            away["points"] += 1
-
-    for value in table.values():
-        value["goal_difference"] = value["scored"] - value["conceded"]
-    return table
+    """The table the simulation starts from. See models/league_table.py."""
+    return build_table(db, season, division)
 
 
 def remaining_fixtures(db, season: str) -> list[Fixture]:

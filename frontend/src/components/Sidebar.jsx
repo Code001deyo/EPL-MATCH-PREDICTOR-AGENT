@@ -6,6 +6,7 @@ import { useIsNarrow } from "../hooks/useBreakpoint";
 const NAV = [
   { to: "/",          label: "Dashboard"  },
   { to: "/predict",   label: "Predict"    },
+  { to: "/race",      label: "Title race" },
   { to: "/analytics", label: "Analytics"  },
   { to: "/teams",     label: "Teams"      },
   { to: "/history",   label: "History"    },

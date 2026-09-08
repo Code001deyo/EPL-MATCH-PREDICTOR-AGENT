@@ -124,3 +124,138 @@ the `lifecycle` wiring fires on its own.
 **Suite: 214 pass, 0 fail** (`docker exec epl-predictor-backend-1 python -m pytest tests/ -q`).
 
 ---
+
+## Phase 3 — subscriptions and notifications (2026-09-09) — **Done, delivery unproven**
+
+Double opt-in (`backend/db/subscribers.py`), a generic-response subscribe endpoint,
+server-rendered confirm/unsubscribe pages that work without JavaScript, and a
+dispatcher that owns every scheduling decision (`backend/notify/queue.py`).
+
+**Send-once is a unique index, not a check.** `(pl_fixture_id, subscriber_id, kind)`.
+The log row is written before the message is handed to Resend and rolled back if
+the send fails. A check-then-send would let two overlapping cron ticks both pass.
+
+**The reset path is untouched.** It still mails one fixed address from
+`RESET_EMAIL_TO` and never an address a caller supplies.
+
+### Verified
+
+- 19 tests, including two integration tests with a stub mailer: a second dispatch
+  tick sends nothing, and a *failed* send is retried on the next tick rather than
+  recorded as delivered.
+- Live against the running stack: `POST /subscribe` returns the generic body,
+  confirm activates and burns the token, a replayed token reports expired,
+  `/subscribe/status` moves 0 to 1, and `POST /notifications/dispatch` runs clean.
+
+### Not verified, and why
+
+**No real email has been sent.** `delivery_configured` is `false` locally — there
+is no `RESEND_API_KEY` in this environment. The flow is built and the send call is
+exercised against a stub, but end-to-end delivery needs:
+
+1. `RESEND_API_KEY` set on Render.
+2. A **verified sending domain** on `hanovatechnologies.co.ke`. Resend rejects
+   every message until DNS is in place.
+3. `PUBLIC_SITE_URL` set, or unsubscribe links render against an empty base.
+
+**The free-tier ceiling is real.** Resend free is 100/day, 3,000/month. A ten-match
+day is 20 emails per subscriber, so roughly **5 subscribers before the daily limit
+bites**. That is a plan decision, not an engineering one.
+
+**Timing is a window, not ten minutes.** `NOTIFY_PRE_WINDOW_MINUTES` defaults to 20
+against a five-minute cron that drifts 5-15 on public runners. The UI says "in a
+window before kickoff", which is the honest claim.
+
+---
+
+## Phase 4 — the title race (2026-09-09) — **Done, verified**
+
+`models/season_sim.py` plays the remaining fixtures 10,000 times using the Poisson
+rates the existing model already returns, ranked by the real Premier League order,
+vectorised in numpy. `models/season_history.py` reconstructs earlier matchweeks so
+the curve is not a single point.
+
+### Verified
+
+Live, on the running stack:
+
+```
+elapsed 29.4s | MW 3 | remaining 350 | unpriced 0
+Man City  50.0% | Arsenal 39.8% | Liverpool 5.5% | Man Utd 2.5%
+sum title probs: 1.0    sum top4: 4.0    sum relegation: 3.0
+```
+
+Those three sums are the check that matters — exactly one club wins, four finish
+top four, three go down — and a ranking bug would otherwise hide behind twenty
+plausible percentages. Arsenal's stored curve: 34.8% to 38.0% to 40.5%.
+
+**Defect found and fixed during verification.** Matchweek 3 held both a live and a
+backfill snapshot, so `/race/current` returned every club twice and the
+week-on-week delta compared a live figure against a reconstruction of the same
+week. A live snapshot now supersedes a reconstruction on read; both rows are kept.
+
+### Honest limits, carried into the UI
+
+Fixtures are drawn independently and rates are held fixed, so these are the
+probabilities implied by today's model under independence. Real seasons have
+injuries, dead rubbers and drift. Reconstructed weeks are shaded and captioned,
+because today's model has been trained on the matches it is reconstructing.
+
+---
+
+## Phase 5 — the UI (2026-09-09) — **Built and unit-verified; the visual pass did not run**
+
+- `components/crest/` — monogram shield badges from each club's real colours, in
+  SVG. No trademarked artwork is shipped. `crestUrl` per club is the slot for
+  licensed assets later. An alias table resolves the spellings the two data
+  sources disagree on.
+- `styles/app.css` — the app's first stylesheet, for the four things inline styles
+  cannot express: media queries, `:focus-visible`, `clamp()` and
+  `prefers-reduced-motion`. The app had no hover states and no keyboard focus ring
+  because there was no syntax for them, not because they were declined.
+- `pages/TitleRace.jsx` + `components/race/` — leaderboard with week-on-week
+  deltas, and an area chart with the reconstructed region shaded.
+- `components/Masthead.jsx` — season, matches played, and a live "data updated"
+  stamp. Not decoration: for eleven days the refresh was failing and every page
+  looked exactly as it always had.
+- `components/SubscribeCard.jsx` — placed after the two charts that establish
+  whether the model is worth following, not before them.
+
+### Verified
+
+11 frontend render tests pass. They catch what a successful build cannot: a
+component that compiles and then throws on first render, which in a
+client-rendered app is a blank white page rather than a visible error. They also
+pin the honesty properties — the reconstruction caveat, the timing caveat, the
+screen-reader text equivalent on every race row.
+
+CI now runs those tests; it previously only built the frontend.
+
+Confirmed present in the shipped bundle and stylesheet: `pl-race-row`,
+`focus-visible`, `prefers-reduced-motion`, and both caveats.
+
+### Not done
+
+**The breakpoint screenshot pass did not happen.** The Chrome extension is not
+connected to this session (`list_connected_browsers` returned `[]`), so the app was
+never driven at 320 / 375 / 768 / 1024 / 1440 / 1920 and no screenshots were
+taken. The responsive CSS is written — `auto-fill` grids, a card-stacking table
+rule below 720px, `clamp()` type, 44px tap targets, a race row that drops its bar
+column on narrow screens — but **written is not verified**, and it should not be
+called verified until someone has looked at it.
+
+---
+
+## File length
+
+Two files passed the ~200-line convention and were split:
+
+- `models/season_sim.py` (219) — table construction to `models/league_table.py`,
+  which also removed a near-duplicate of the same twenty lines in
+  `models/season_history.py`. Two copies of a points calculation is two places for
+  the simulation's table to drift away from the site's.
+- `pages/TitleRace.jsx` (283) — row rendering to
+  `components/race/RaceLeaderboard.jsx`, the long-to-wide reshape to
+  `components/race/buildSeries.js`.
+
+**Final: backend 243 pass, frontend 11 pass.**
