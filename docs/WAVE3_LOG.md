@@ -259,3 +259,20 @@ Two files passed the ~200-line convention and were split:
   `components/race/buildSeries.js`.
 
 **Final: backend 243 pass, frontend 11 pass.**
+
+---
+
+## CI (2026-09-09)
+
+All three checks green on PR #1: Backend tests, Frontend build (now including the
+new test step), Seed snapshot present.
+
+Three attempts were needed to make `npm ci` accept the lockfile. The cause was
+not the dependencies: CI pins Node 20 (**npm 10**) and the lock was being
+regenerated with a local npm 11, which dedupes differently — npm 10 then read it
+as incomplete (`Missing: yaml@2.9.0 from lock file`) while `npm ci` succeeded
+locally. Regenerated with `npx npm@10` and verified the way CI runs it: only
+`package.json` and `package-lock.json` in an empty directory, `npm ci`, exit 0.
+
+Passing locally with the wrong npm proved nothing, which is why the first two
+fixes were guesses.
