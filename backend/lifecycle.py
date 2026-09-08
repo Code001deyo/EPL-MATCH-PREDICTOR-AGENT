@@ -96,6 +96,7 @@ def _refresh_live_data():
         "statistics_status": None,
         "settled": None,
         "schedule": None,
+        "title_race": None,
     }
 
     result["played_fixtures"] = refresh_current_season()
@@ -127,6 +128,33 @@ def _refresh_live_data():
         _record_error("refresh:settlement", exc)
     finally:
         db.close()
+
+    # The title race, recomputed from the results that just landed. This is what
+    # makes the curve move: one stored snapshot per refresh, so a club's
+    # probability climbing through a winning run is a record rather than a
+    # redrawing. Caught, because a failed simulation is a stale chart and must not
+    # cost the refresh its results.
+    try:
+        from db.database import SessionLocal as _Session
+        from db import race as race_db
+        from models import season_sim
+
+        sim_db = _Session()
+        try:
+            sim = season_sim.run(sim_db, season)
+            if sim["status"] == "ok":
+                race_db.save_snapshot(sim_db, season, sim["matchweek"], sim["teams"],
+                                      kind=race_db.KIND_LIVE,
+                                      simulations=sim["simulations"])
+                result["title_race"] = {
+                    "matchweek": sim["matchweek"],
+                    "remaining_fixtures": sim["remaining_fixtures"],
+                    "unpriced_fixtures": len(sim["unpriced_fixtures"]),
+                }
+        finally:
+            sim_db.close()
+    except Exception as exc:
+        _record_error("refresh:title-race", exc)
 
     # Reconciliation attaches statistics to rows that already exist, so the row
     # count, max id and max date are all unchanged — the cache signature would not

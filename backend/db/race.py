@@ -117,12 +117,34 @@ def save_snapshot(db, season: str, matchweek: int, rows: list[dict],
     return len(rows)
 
 
-def series(db, season: str, teams: list[str] | None = None) -> list[dict]:
-    """The stored curve for a season, oldest matchweek first."""
+def series(db, season: str, teams: list[str] | None = None,
+           prefer_live: bool = True) -> list[dict]:
+    """The stored curve for a season, oldest matchweek first.
+
+    A matchweek can hold both kinds: the backfill reconstructs every completed
+    week, including the one a live snapshot was just written for. They are near-
+    identical by construction but not equal, and returning both put every club on
+    the page twice and made the week-on-week delta compare a live figure against a
+    reconstruction of the same week.
+
+    So a live snapshot supersedes a reconstruction of the same matchweek. Both
+    rows are kept — the reconstruction is still the honest comparison for the
+    weeks that have no live point — but only one is served per (matchweek, team).
+    """
     q = db.query(TitleOddsSnapshot).filter(TitleOddsSnapshot.season == season)
     if teams:
         q = q.filter(TitleOddsSnapshot.team.in_(teams))
     rows = q.order_by(TitleOddsSnapshot.matchweek.asc()).all()
+
+    if prefer_live:
+        chosen: dict[tuple, TitleOddsSnapshot] = {}
+        for row in rows:
+            key = (row.matchweek, row.team)
+            held = chosen.get(key)
+            if held is None or (held.kind != KIND_LIVE and row.kind == KIND_LIVE):
+                chosen[key] = row
+        rows = sorted(chosen.values(), key=lambda r: (r.matchweek, r.team))
+
     return [
         {
             "matchweek": r.matchweek,
