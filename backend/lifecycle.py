@@ -95,9 +95,21 @@ def _refresh_live_data():
         "enriched": None,
         "statistics_status": None,
         "settled": None,
+        "schedule": None,
     }
 
     result["played_fixtures"] = refresh_current_season()
+
+    # The schedule, not just the results. `refresh_current_season` stores only
+    # played matches, so without this the fixtures still to come exist nowhere on
+    # disk — and a notification cannot be scheduled against a match the server
+    # has no kickoff time for. Failure here must not fail the refresh: stale
+    # fixtures are a missed alert, whereas an aborted refresh is stale results.
+    try:
+        from data.schedule import sync_fixtures
+        result["schedule"] = sync_fixtures(season)
+    except Exception as exc:
+        _record_error("refresh:schedule", exc)
 
     try:
         reports = enrich_all([season])

@@ -165,7 +165,8 @@ def _parse_fixture(f: dict, season_label: str) -> dict | None:
         # Kickoff timestamp → ISO 'YYYY-MM-DD'.
         # ISO is required, not cosmetic: rolling windows compare this column as a
         # string, and only ISO makes that comparison chronological.
-        kickoff_millis = f.get("kickoff", {}).get("millis")
+        kickoff = f.get("kickoff", {}) or {}
+        kickoff_millis = kickoff.get("millis")
         if kickoff_millis:
             from datetime import datetime, timezone
             dt = datetime.fromtimestamp(kickoff_millis / 1000, tz=timezone.utc)
@@ -194,6 +195,13 @@ def _parse_fixture(f: dict, season_label: str) -> dict | None:
             "away_goals": away_goals,
             "status": status,
             "pl_fixture_id": int(f["id"]),
+            # The kickoff *instant*, kept alongside the date. Only the date was
+            # retained before, which is enough to order history but not to say
+            # when a match starts — so nothing could be scheduled against it.
+            # `db/fixtures.py` stores these; notifications and the season
+            # simulation both read them.
+            "kickoff_millis": kickoff_millis,
+            "kickoff_label": kickoff.get("label"),
         }
     except Exception:
         return None

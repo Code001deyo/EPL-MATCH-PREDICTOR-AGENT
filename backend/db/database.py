@@ -340,5 +340,14 @@ def _dedupe_predictions(conn):
 
 
 def init_db():
+    # Models defined in sibling modules have to be imported before create_all, or
+    # they are simply absent from Base.metadata and their tables are never made —
+    # a failure that shows up later as "no such table" from a router, far from
+    # its cause. Imported here rather than at module scope because those modules
+    # import Base from this one.
+    import db.fixtures  # noqa: F401  (registers Fixture)
+    import db.subscribers  # noqa: F401  (registers Subscriber, NotificationLog)
+    import db.race  # noqa: F401  (registers TitleOddsSnapshot)
+
     Base.metadata.create_all(bind=engine)
     migrate_db()
