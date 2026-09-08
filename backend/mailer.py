@@ -1,9 +1,18 @@
 """Outbound email, via Resend's HTTP API.
 
-Only one message is ever sent: the password-reset link. It goes to a FIXED address
-from RESET_EMAIL_TO, never to an address supplied in a request — an endpoint that
-mailed a valid reset link wherever the caller asked would hand out account access
-to anyone who could type.
+Two kinds of message, kept deliberately separate.
+
+**The password-reset link** goes to a FIXED address from RESET_EMAIL_TO, never to
+an address supplied in a request — an endpoint that mailed a valid reset link
+wherever the caller asked would hand out account access to anyone who could type.
+That restriction is unchanged and must stay.
+
+**Match notifications** go to confirmed subscribers, which is a different trust
+model and so a different path: the address has proved it wants the mail by
+clicking a confirmation link (see db/subscribers.py), the content carries no
+credential, and every message carries a working unsubscribe. Subscriber mail must
+never reuse the reset path, and the reset path must never accept a caller's
+address.
 
 If Resend is not configured this does NOT pretend to have sent anything. It
 returns False and logs loudly, so a misconfiguration is visible to the operator
@@ -51,23 +60,54 @@ def send_reset_email(reset_url: str, username: str) -> bool:
         f"without opening it, and requesting a new reset invalidates this one."
     )
 
+    return send(to, "EPL Predictor — password reset", text, sender=sender)
+
+
+def send(to: str, subject: str, text: str, html: str | None = None,
+         sender: str | None = None, headers: dict | None = None) -> bool:
+    """Hand one message to Resend. True only if Resend accepted it.
+
+    The single place an email leaves this process. Returns False and logs the
+    reason rather than raising: a caller sending to a list must be able to record
+    that one address failed and carry on, and must never be able to mistake a
+    rejection for a delivery.
+    """
+    api_key = _env("RESEND_API_KEY")
+    sender = sender or _env("NOTIFY_EMAIL_FROM") or _env(
+        "RESET_EMAIL_FROM", "EPL Predictor <noreply@hanovatechnologies.co.ke>")
+
+    if not api_key:
+        print("[mail] CANNOT SEND: RESEND_API_KEY is missing. "
+              f"Message to {to} ({subject!r}) was NOT delivered.")
+        return False
+
+    payload = {"from": sender, "to": [to], "subject": subject, "text": text}
+    if html:
+        payload["html"] = html
+    if headers:
+        # List-Unsubscribe lives here. Mail clients surface it as a one-click
+        # unsubscribe, which is what keeps a small sending domain out of spam
+        # folders — a subscriber who cannot leave easily reports instead.
+        payload["headers"] = headers
+
     try:
         response = httpx.post(
             RESEND_ENDPOINT,
             headers={"Authorization": f"Bearer {api_key}"},
-            json={
-                "from": sender,
-                "to": [to],
-                "subject": "EPL Predictor — password reset",
-                "text": text,
-            },
+            json=payload,
             timeout=15,
         )
         if response.status_code >= 400:
             # The body carries Resend's reason — an unverified domain, usually.
-            print(f"[mail] Resend rejected the reset email: HTTP {response.status_code} {response.text[:300]}")
+            print(f"[mail] Resend rejected {subject!r} to {to}: "
+                  f"HTTP {response.status_code} {response.text[:300]}")
             return False
         return True
     except Exception as exc:
         print(f"[mail] could not reach Resend: {type(exc).__name__}: {exc}")
         return False
+
+
+def notifications_configured() -> bool:
+    """Subscriber mail needs a key and a from-address; it has no fixed recipient."""
+    return bool(_env("RESEND_API_KEY"))

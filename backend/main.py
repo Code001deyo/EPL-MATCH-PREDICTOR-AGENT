@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from db.database import init_db, get_db
 from data.ingestion import get_season_ids, current_season_id, _current_season_label
 import lifecycle
-from routers import predict, teams, results, analytics, analytics_model, auth_router, model as model_router
+from routers import (predict, teams, results, analytics, analytics_model,
+                     auth_router, model as model_router, subscribe as subscribe_router)
 
 # The interactive docs enumerate every route, so on a public deployment they
 # advertise /auth/login, /model/retrain and /data/refresh to anyone who asks —
@@ -54,6 +55,7 @@ app.include_router(results.router)
 app.include_router(analytics.router)
 app.include_router(analytics_model.router)
 app.include_router(model_router.router)
+app.include_router(subscribe_router.router)
 
 
 @app.on_event("startup")
