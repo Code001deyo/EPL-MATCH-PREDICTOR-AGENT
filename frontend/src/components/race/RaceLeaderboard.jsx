@@ -1,67 +1,62 @@
-import Crest from "../crest/Crest";
 import { clubIdentity } from "../crest/clubIdentity";
 import { C } from "../../theme";
 
-/* One club's row in the title race.
+/* The chart's key: every club, its line colour, and its current probability.
  *
- * Split out of pages/TitleRace.jsx when that file passed the ~200-line mark. The
- * seam is real rather than arbitrary: this is presentation of a single club,
- * the page is composition and data loading.
+ * This started as twenty rows each carrying a progress bar and a monogram badge.
+ * Both had to go. Fifteen of the bars sat at 0% and rendered as empty track, so
+ * the bulk of the page was clubs with no chance; and the badge was a 26px
+ * monogram that read as a favicon rather than a crest, decorating a row that
+ * already said the club's name.
+ *
+ * What replaces them does the job the bar was failing at — tying a name to a line
+ * on the chart above — using the one thing that can: the line's own colour. All
+ * twenty clubs are listed, because every one of them is in the simulation and a
+ * club at 0.0% is a fact worth being able to read.
  */
 export default function RaceLeaderboard({ teams }) {
+  if (!teams.length) return null;
+
   return (
-    <div role="list">
-      {teams.map((team, i) => (
-        <RaceRow key={team.team} team={team} rank={i + 1} />
-      ))}
+    <div style={{ marginTop: 20 }}>
+      <div className="pl-race-key" role="list">
+        {teams.map((team, i) => (
+          <KeyRow key={team.team} team={team} rank={i + 1} />
+        ))}
+      </div>
     </div>
   );
 }
 
-function RaceRow({ team, rank }) {
+function KeyRow({ team, rank }) {
   const club = clubIdentity(team.team);
   const percent = (team.title_prob || 0) * 100;
   const delta = team.title_delta;
 
   return (
-    <div className="pl-race-row" role="listitem">
-      <div className="pl-race-rank">{rank}</div>
+    <div className="pl-race-key-row" role="listitem">
+      <span className="pl-race-rank">{rank}</span>
 
-      <div className="pl-race-name">
-        <Crest team={team.team} size={26} />
-        <span>{club.name || team.team}</span>
-      </div>
+      {/* Same colour and stroke weight as this club's line on the chart, so the
+          eye can move between key and plot without a lookup. */}
+      <span
+        aria-hidden="true"
+        className="pl-race-swatch"
+        style={{ background: club.primary }}
+      />
 
-      <div className="pl-race-track-cell">
-        <div className="pl-race-track">
-          <div
-            className="pl-race-fill"
-            style={{
-              // A floor of 2px so a club on 0.1% is visibly present rather than
-              // rendering as nothing, which would read as eliminated.
-              width: `${Math.max(percent, percent > 0 ? 1 : 0)}%`,
-              minWidth: percent > 0 ? 2 : 0,
-              background: club.primary,
-            }}
-          />
-        </div>
-      </div>
+      <span className="pl-race-club">{club.name || team.team}</span>
 
-      <div className="pl-race-prob">
-        {percent >= 0.05 ? `${percent.toFixed(1)}%` : "—"}
-      </div>
+      <span className="pl-race-pct">
+        {percent >= 0.05 ? `${percent.toFixed(1)}%` : "0%"}
+      </span>
 
-      <div
-        className="pl-race-delta"
-        style={{ color: deltaColour(delta) }}
-        // The bar and the arrow are both colour-coded, so the row needs a text
-        // equivalent — several clubs share a palette and colour alone says
-        // nothing to a screen reader.
-        aria-label={describe(team, percent, delta)}
-      >
+      <span className="pl-race-move" style={{ color: deltaColour(delta) }}>
         {delta == null ? "" : formatDelta(delta)}
-      </div>
+      </span>
 
+      {/* Colour and an arrow are the only visual carriers here, and several clubs
+          share a palette — so each row states itself in words for a screen reader. */}
       <span className="pl-sr-only">{describe(team, percent, delta)}</span>
     </div>
   );
@@ -76,8 +71,8 @@ function describe(team, percent, delta) {
 
 function formatDelta(delta) {
   const points = delta * 100;
-  if (Math.abs(points) < 0.05) return "—";
-  return `${points > 0 ? "▲" : "▼"} ${Math.abs(points).toFixed(1)}`;
+  if (Math.abs(points) < 0.05) return "";
+  return `${points > 0 ? "▲" : "▼"}${Math.abs(points).toFixed(1)}`;
 }
 
 function deltaColour(delta) {

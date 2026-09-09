@@ -68,6 +68,42 @@ def _all_fixture_rates(db, season: str, on_progress=None):
     return rates, skipped
 
 
+# A match occupies about 115 minutes of wall clock. A matchweek's probability is
+# true from the moment its last match finishes, not from its kickoff.
+MATCH_MINUTES = 115
+
+
+def matchweek_ended_at(db, season: str) -> dict[int, str]:
+    """matchweek -> ISO UTC of the final whistle of its last match.
+
+    This is what puts a snapshot at a real moment instead of at an integer, and
+    it is what makes a day or month view of the chart mean anything. Derived from
+    the stored kickoff times, which is why Phase 2 had to come first.
+
+    A matchweek whose kickoffs are all unknown gets no timestamp rather than a
+    guessed one — it will fall back to the run time, and the caller can see that.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    ends: dict[int, str] = {}
+    rows = (
+        db.query(Fixture.matchweek, Fixture.kickoff_utc)
+        .filter(Fixture.season == season, Fixture.kickoff_utc.isnot(None))
+        .all()
+    )
+    for matchweek, kickoff in rows:
+        try:
+            dt = datetime.fromisoformat(kickoff)
+        except (TypeError, ValueError):
+            continue
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        finished = (dt + timedelta(minutes=MATCH_MINUTES)).isoformat()
+        if matchweek not in ends or finished > ends[matchweek]:
+            ends[matchweek] = finished
+    return ends
+
+
 def _matchweek_of(db, season: str) -> dict[tuple, int]:
     """(home, away) → matchweek, across results and fixtures."""
     weeks = {}
@@ -100,6 +136,7 @@ def backfill(db, season: str, simulations: int = 2_000, on_progress=None) -> dic
 
     rates_by_pair, skipped = _all_fixture_rates(db, season, on_progress=on_progress)
     weeks = _matchweek_of(db, season)
+    ends = matchweek_ended_at(db, season)
 
     written = 0
     for matchweek in range(1, int(latest) + 1):
@@ -123,7 +160,8 @@ def backfill(db, season: str, simulations: int = 2_000, on_progress=None) -> dic
                                     # rolled again.
                                     seed=1000 + matchweek)
         save_snapshot(db, season, matchweek, teams,
-                      kind=KIND_BACKFILL, simulations=simulations)
+                      kind=KIND_BACKFILL, simulations=simulations,
+                      as_of=ends.get(matchweek))
         written += 1
         if on_progress:
             on_progress(matchweek, int(latest))

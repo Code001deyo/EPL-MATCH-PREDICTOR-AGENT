@@ -105,8 +105,14 @@ def simulate(response: Response, simulations: int = 10_000,
                 return out
 
             jobs.progress(job_id, stage="saving")
+            # Stamped at the moment the matchweek finished, not at the moment
+            # this ran. Two simulations of the same matchweek must land on the
+            # same point of the time axis, or re-running the job would slide the
+            # curve sideways and invent movement.
+            ends = season_history.matchweek_ended_at(db, season)
             race_db.save_snapshot(db, season, out["matchweek"], out["teams"],
-                                  kind=race_db.KIND_LIVE, simulations=simulations)
+                                  kind=race_db.KIND_LIVE, simulations=simulations,
+                                  as_of=ends.get(out["matchweek"]))
 
             if backfill:
                 jobs.progress(job_id, stage="reconstructing earlier matchweeks")

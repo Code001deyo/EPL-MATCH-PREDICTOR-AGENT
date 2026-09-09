@@ -143,9 +143,15 @@ def _refresh_live_data():
         try:
             sim = season_sim.run(sim_db, season)
             if sim["status"] == "ok":
+                # Stamped at the moment the matchweek finished, not at the moment
+                # this refresh ran — the probability became true then, and a
+                # refresh three hours later must not move the point along the axis.
+                from models.season_history import matchweek_ended_at
+                ends = matchweek_ended_at(sim_db, season)
                 race_db.save_snapshot(sim_db, season, sim["matchweek"], sim["teams"],
                                       kind=race_db.KIND_LIVE,
-                                      simulations=sim["simulations"])
+                                      simulations=sim["simulations"],
+                                      as_of=ends.get(sim["matchweek"]))
                 result["title_race"] = {
                     "matchweek": sim["matchweek"],
                     "remaining_fixtures": sim["remaining_fixtures"],

@@ -248,6 +248,9 @@ def migrate_db():
         ("predictions", "predicted_stats", "TEXT"),
         ("predictions", "updated_at", "TEXT"),
         ("predictions", "times_predicted", "INTEGER"),
+        # The moment a title-race snapshot was true, as opposed to when it was
+        # written. Without it the chart can only be drawn per matchweek.
+        ("title_odds_snapshots", "as_of", "TEXT"),
     ]
     indexes = [
         ("idx_match_results_date", "match_results", "date"),

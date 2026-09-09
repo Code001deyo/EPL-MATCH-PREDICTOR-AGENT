@@ -61,6 +61,9 @@
    target that reliably is. */
 button,
 a[role="button"],
+select,
+input:not([type="hidden"]),
+nav a,
 .pl-tap {
   min-height: 44px;
 }
@@ -230,82 +233,103 @@ a[role="button"],
 
 /* --- title race --------------------------------------------------------- */
 
-.pl-race-row {
-  display: grid;
-  /* rank | crest+name | bar | probability | delta */
-  grid-template-columns: 1.75rem minmax(0, 1fr) minmax(0, 2fr) 3.5rem 4rem;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 4px;
-  border-bottom: 1px solid var(--slate-100);
+/* Granularity switch. A segmented control rather than a dropdown: there are four
+   options, they are mutually exclusive, and the current one should be readable
+   without opening anything. */
+.pl-seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  background: var(--slate-100);
+  border-radius: var(--radius-md);
 }
 
-.pl-race-row:last-child {
-  border-bottom: none;
+.pl-seg button {
+  /* 44, not the 32 this started at. The rule above says 44px and a component
+     that quietly opts out of the project's own accessibility floor is worse than
+     not having the rule. */
+  min-height: 44px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--slate-600);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.pl-seg button:hover:not([aria-pressed="true"]) {
+  background: rgba(55, 0, 60, 0.06);
+  color: var(--pl-purple);
+}
+
+.pl-seg button[aria-pressed="true"] {
+  background: var(--white);
+  color: var(--pl-purple);
+  box-shadow: var(--shadow-card);
+}
+
+/* The chart key: all twenty clubs, wrapped into as many columns as fit. A single
+   column would be twenty rows of mostly-empty space, which is what this replaced. */
+.pl-race-key {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 258px), 1fr));
+  gap: 2px 18px;
+  border-top: 1px solid var(--slate-100);
+  padding-top: 14px;
+}
+
+.pl-race-key-row {
+  display: grid;
+  /* Widened from 230px columns: "Bournemouth" and "Nott'm Forest" were being
+     truncated, and a club name cut to "Nott'm Fo..." reads as a rendering fault
+     rather than as a deliberate abbreviation. */
+  grid-template-columns: 1.3rem 18px minmax(0, 1fr) 3rem 2.4rem;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 0.8125rem;
 }
 
 .pl-race-rank {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 700;
   color: var(--slate-400);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
-.pl-race-name {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--slate-800);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
+/* The line key. Matches the stroke on the chart above. */
+.pl-race-swatch {
+  height: 3px;
+  border-radius: 2px;
+  display: block;
 }
 
-.pl-race-name span {
+.pl-race-club {
+  font-weight: 600;
+  color: var(--slate-800);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.pl-race-track {
-  height: 10px;
-  border-radius: 999px;
-  background: var(--slate-100);
-  overflow: hidden;
-}
-
-.pl-race-fill {
-  height: 100%;
-  border-radius: 999px;
-  transition: width 0.4s ease;
-}
-
-.pl-race-prob {
-  font-size: 0.9375rem;
+.pl-race-pct {
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   color: var(--pl-purple);
   text-align: right;
 }
 
-.pl-race-delta {
-  font-size: 0.75rem;
+.pl-race-move {
+  font-size: 0.6875rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   text-align: right;
-}
-
-/* Below the medium breakpoint the bar column is the one that has to go: the
-   name and the number are the information, the bar is the illustration. */
-@media (max-width: 720px) {
-  .pl-race-row {
-    grid-template-columns: 1.5rem minmax(0, 1fr) 3.25rem 3.5rem;
-  }
-
-  .pl-race-track-cell {
-    display: none;
-  }
 }
 
 /* --- tables that become cards ------------------------------------------ */
@@ -358,6 +382,10 @@ a[role="button"],
 /* Anything genuinely wide scrolls inside its own box, never the page body. */
 .pl-scroll-x {
   overflow-x: auto;
+  /* Explicit, not redundant: CSS says a box with overflow-x set to auto computes
+     a `visible` overflow-y as `auto` too, so this box would grow a vertical
+     scrollbar nobody asked for whenever its content came close to the height. */
+  overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
 }
 

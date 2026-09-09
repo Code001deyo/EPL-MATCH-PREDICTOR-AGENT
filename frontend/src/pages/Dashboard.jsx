@@ -124,7 +124,7 @@ export default function Dashboard() {
           points and the calibration curve carries six. */}
       <div style={{
         display: "grid",
-        gridTemplateColumns: compact ? "1fr" : "2fr 1fr",
+        gridTemplateColumns: compact ? "minmax(0, 1fr)" : "minmax(0, 2fr) minmax(0, 1fr)",
         gap: space.md, marginBottom: space.xl, alignItems: "start",
       }}>
         <AccuracyTrend />
@@ -142,7 +142,7 @@ export default function Dashboard() {
 
       <div style={{
         display: "grid",
-        gridTemplateColumns: compact ? "1fr" : "1fr 1fr",
+        gridTemplateColumns: compact ? "minmax(0, 1fr)" : "minmax(0, 1fr) minmax(0, 1fr)",
         gap: space.lg, marginBottom: space.lg, alignItems: "start",
       }}>
         <SeasonComparison />
@@ -151,7 +151,7 @@ export default function Dashboard() {
 
       <div style={{
         display: "grid",
-        gridTemplateColumns: compact ? "1fr" : "1fr 1fr",
+        gridTemplateColumns: compact ? "minmax(0, 1fr)" : "minmax(0, 1fr) minmax(0, 1fr)",
         gap: space.lg, marginBottom: space.lg, alignItems: "start",
       }}>
         <UpcomingFixtures />

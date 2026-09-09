@@ -14,7 +14,8 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "test": "react-scripts test"
+    "test": "react-scripts test",
+    "qa:responsive": "node scripts/responsive-check.js"
   },
   "proxy": "http://localhost:8001",
   "browserslist": {
@@ -31,7 +32,8 @@
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^14.3.1"
+    "@testing-library/react": "^14.3.1",
+    "puppeteer-core": "^23.11.1"
   },
   "jest": {
     "moduleNameMapper": {

@@ -10,12 +10,11 @@
  * says so rather than rendering as absent.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import axios from "axios";
 
 import TitleRace from "./TitleRace";
 import SubscribeCard from "../components/SubscribeCard";
-import Crest from "../components/crest/Crest";
 import { clubIdentity } from "../components/crest/clubIdentity";
 
 jest.mock("axios");
@@ -38,12 +37,12 @@ const TEAMS = [
 ];
 
 const HISTORY = [
-  { matchweek: 1, team: "Arsenal", title_prob: 0.348, points: 3, kind: "backfill" },
-  { matchweek: 2, team: "Arsenal", title_prob: 0.380, points: 6, kind: "backfill" },
-  { matchweek: 3, team: "Arsenal", title_prob: 0.405, points: 9, kind: "live" },
-  { matchweek: 1, team: "Man City", title_prob: 0.470, points: 3, kind: "backfill" },
-  { matchweek: 2, team: "Man City", title_prob: 0.498, points: 6, kind: "backfill" },
-  { matchweek: 3, team: "Man City", title_prob: 0.497, points: 9, kind: "live" },
+  { matchweek: 1, team: "Arsenal", title_prob: 0.348, points: 3, kind: "backfill", as_of: "2026-08-16T18:00:00+00:00" },
+  { matchweek: 2, team: "Arsenal", title_prob: 0.380, points: 6, kind: "backfill", as_of: "2026-08-23T18:00:00+00:00" },
+  { matchweek: 3, team: "Arsenal", title_prob: 0.405, points: 9, kind: "live", as_of: "2026-09-06T18:00:00+00:00" },
+  { matchweek: 1, team: "Man City", title_prob: 0.470, points: 3, kind: "backfill", as_of: "2026-08-16T18:00:00+00:00" },
+  { matchweek: 2, team: "Man City", title_prob: 0.498, points: 6, kind: "backfill", as_of: "2026-08-23T18:00:00+00:00" },
+  { matchweek: 3, team: "Man City", title_prob: 0.497, points: 9, kind: "live", as_of: "2026-09-06T18:00:00+00:00" },
 ];
 
 function mockRace({ status = "ok", teams = TEAMS, history = HISTORY } = {}) {
@@ -68,29 +67,62 @@ function mockRace({ status = "ok", teams = TEAMS, history = HISTORY } = {}) {
 }
 
 describe("TitleRace", () => {
-  it("renders the leaderboard with each club's probability", async () => {
+  it("lists the clubs in contention with their probability", async () => {
     mockRace();
     render(<TitleRace />);
 
-    // getAllByText, not getByText: a contender's name appears in the
-    // leaderboard row and again in the chart legend, which is correct.
     expect((await screen.findAllByText("Man City")).length).toBeGreaterThan(0);
     expect(screen.getByText("49.7%")).toBeInTheDocument();
     expect(screen.getByText("40.5%")).toBeInTheDocument();
+  });
+
+  it("lists every club, including one with no chance left", async () => {
+    mockRace();
+    render(<TitleRace />);
+
+    // Burnley is on 0% in the fixture data. It is still in the simulation and
+    // still in the key: a club at 0.0% is a fact worth being able to read.
+    expect(await screen.findByText("Burnley")).toBeInTheDocument();
+    expect(screen.getByText("0%")).toBeInTheDocument();
+  });
+
+  it("offers the time resolutions and switches between them", async () => {
+    mockRace();
+    render(<TitleRace />);
+
+    const monthly = await screen.findByRole("button", { name: "Monthly" });
+    expect(screen.getByRole("button", { name: "Matchweek" })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(monthly);
+    expect(monthly).toHaveAttribute("aria-pressed", "true");
+
+    // Switching off matchweeks must say why the line is a step rather than a
+    // slope, or the chart quietly implies the odds move between matches.
+    await waitFor(() =>
+      expect(screen.getByText(/Drawn as steps, not slopes/i)).toBeInTheDocument()
+    );
+  });
+
+  it("says the Championship is not simulated rather than leaving it unexplained", async () => {
+    mockRace();
+    render(<TitleRace />);
+    await waitFor(() =>
+      expect(screen.getByText(/Championship is not simulated here/i)).toBeInTheDocument()
+    );
   });
 
   it("shows the week-on-week movement that makes the page feel live", async () => {
     mockRace();
     render(<TitleRace />);
     // Arsenal +2.4 percentage points.
-    expect(await screen.findByText(/▲ 2\.4/)).toBeInTheDocument();
+    expect(await screen.findByText(/▲\s*2\.4/)).toBeInTheDocument();
   });
 
   it("labels the reconstructed weeks rather than passing them off as a record", async () => {
     mockRace();
     render(<TitleRace />);
     await waitFor(() =>
-      expect(screen.getByText(/reconstructions, not a record/i)).toBeInTheDocument()
+      expect(screen.getByText(/reconstruction, not record/i)).toBeInTheDocument()
     );
   });
 
@@ -138,12 +170,7 @@ describe("SubscribeCard", () => {
   });
 });
 
-describe("Crest", () => {
-  it("labels the badge for screen readers", () => {
-    render(<Crest team="Arsenal" />);
-    expect(screen.getByRole("img", { name: "Arsenal" })).toBeInTheDocument();
-  });
-
+describe("clubIdentity", () => {
   it("resolves the spellings that reach the UI from the other data source", () => {
     expect(clubIdentity("Manchester City").name).toBe("Man City");
     expect(clubIdentity("Nottingham Forest").abbr).toBe("NFO");

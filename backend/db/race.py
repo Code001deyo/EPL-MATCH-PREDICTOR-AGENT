@@ -66,6 +66,16 @@ class TitleOddsSnapshot(Base):
     # Mean final points across the simulations — the "expected finish" line.
     projected_points = Column(Real)
 
+    # When this snapshot was *true*, as distinct from when the row was written.
+    #
+    # A title probability does not drift with the clock: it moves when matches are
+    # played and holds still in between. So a point belongs at the moment the last
+    # match of its matchweek finished, not at the moment the simulation happened to
+    # run. Stamping it that way is what lets the chart be resampled to a day or a
+    # month and still be true — and it is why the line between two kickoffs is
+    # flat rather than wobbling.
+    as_of = Column(Text, index=True)
+
     kind = Column(Text, index=True, default=KIND_LIVE)
     simulations = Column(Integer)      # how many seasons were simulated
     created_at = Column(Text)
@@ -80,7 +90,8 @@ def _now() -> str:
 
 
 def save_snapshot(db, season: str, matchweek: int, rows: list[dict],
-                  kind: str = KIND_LIVE, simulations: int = 0) -> int:
+                  kind: str = KIND_LIVE, simulations: int = 0,
+                  as_of: str | None = None) -> int:
     """Write one simulation's per-club results, replacing any existing point.
 
     Replace rather than skip: a live snapshot recomputed after a correction to
@@ -111,6 +122,7 @@ def save_snapshot(db, season: str, matchweek: int, rows: list[dict],
         target.goal_difference = row.get("goal_difference")
         target.projected_points = row.get("projected_points")
         target.simulations = simulations
+        target.as_of = as_of or now
         target.created_at = now
 
     db.commit()
@@ -156,6 +168,9 @@ def series(db, season: str, teams: list[str] | None = None,
             "played": r.played,
             "projected_points": r.projected_points,
             "kind": r.kind,
+            # Falls back to created_at for rows written before as_of existed, so
+            # an old snapshot still lands somewhere real on a time axis.
+            "as_of": r.as_of or r.created_at,
             "created_at": r.created_at,
         }
         for r in rows
