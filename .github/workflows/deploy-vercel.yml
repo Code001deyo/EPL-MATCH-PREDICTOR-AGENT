@@ -87,6 +87,29 @@ jobs:
           echo "Five most recent production deployments:"
           jq -r '.deployments[] | "  \(.created / 1000 | todate)  \(.state)  \(.meta.githubCommitSha[0:8] // "-")  \(.meta.githubCommitMessage // "" | split("\n")[0])"' deployments.json
 
+      - name: Check the token can reach this project
+        # `vercel pull` fails with "Could not retrieve Project Settings" whether
+        # the token is invalid, scoped to the wrong team, or simply lacks access
+        # to this project. Three different fixes behind one message, so ask the
+        # API directly and say which it is.
+        env:
+          TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o project.json -w '%{http_code}' --max-time 60             -H "Authorization: Bearer $TOKEN"             "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_ORG_ID}")
+
+          if [ "$code" = "200" ]; then
+            echo "token can read $(jq -r '.name' project.json) (${VERCEL_PROJECT_ID})"
+            exit 0
+          fi
+
+          echo "::error::the VERCEL_TOKEN cannot read project ${VERCEL_PROJECT_ID} (HTTP $code)"
+          # The body names the reason; it contains no credential.
+          jq -r '.error.message // .' project.json 2>/dev/null || cat project.json
+          echo "The token must be created under the team that owns the project"
+          echo "(${VERCEL_ORG_ID}), not a personal scope, at https://vercel.com/account/tokens"
+          exit 1
+
       - name: Install
         run: npm ci
 
