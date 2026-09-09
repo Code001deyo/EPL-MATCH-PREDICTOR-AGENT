@@ -1,0 +1,126 @@
+name: Simulate the title race
+
+# Runs the season simulation against the deployed instance.
+#
+# The refresh already writes one live snapshot per run, so the curve builds
+# itself over a season without this. What this exists for is the backfill: the
+# one-off reconstruction of matchweeks that finished before snapshots were being
+# stored, so a mid-season deployment does not show a chart with a single point on
+# it and nothing to compare against.
+#
+# It lives here rather than being run by hand because the admin key is a
+# repository secret. That is deliberate — the key must not have to be pasted into
+# a terminal to do routine work.
+on:
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: "Also reconstruct completed matchweeks (slow, once per season is enough)"
+        type: boolean
+        default: false
+      simulations:
+        description: "Simulated seasons per snapshot"
+        type: string
+        default: "10000"
+
+concurrency:
+  # The server is single-flight per job kind anyway — a second request joins the
+  # running simulation rather than starting a rival — but a queued duplicate only
+  # wastes a cold start.
+  group: simulate-race
+  cancel-in-progress: false
+
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check configuration
+        run: |
+          test -n "${{ secrets.ADMIN_API_KEY }}" || { echo "::error::repository secret ADMIN_API_KEY is not set"; exit 1; }
+          test -n "${{ vars.API_BASE_URL }}" || { echo "::error::repository variable API_BASE_URL is not set"; exit 1; }
+
+      - name: Wake the instance
+        env:
+          API: ${{ vars.API_BASE_URL }}
+        run: |
+          for i in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$API/health" || true)
+            [ "$code" = "200" ] && { echo "awake after $((i*10))s"; exit 0; }
+            echo "  attempt $i: HTTP $code"
+            sleep 10
+          done
+          echo "::error::$API/health did not respond within 2 minutes"
+          exit 1
+
+      - name: Start the simulation
+        env:
+          API: ${{ vars.API_BASE_URL }}
+          KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          curl -sS --fail-with-body --max-time 120 \
+            -X POST "$API/race/simulate?simulations=${{ inputs.simulations }}&backfill=${{ inputs.backfill }}" \
+            -H "X-Admin-Key: $KEY" -o start.json
+          cat start.json
+          job=$(python -c "import json;print(json.load(open('start.json'))['job_id'])")
+          echo "job=$job" >> "$GITHUB_ENV"
+
+      - name: Wait for it
+        env:
+          API: ${{ vars.API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          # A backfill prices every fixture of the season once and then simulates
+          # each completed matchweek, so it runs for several minutes on a free
+          # instance. Polling also keeps that instance awake while it works.
+          for i in $(seq 1 80); do
+            curl -sS --fail --max-time 60 "$API/race/jobs/$job" -o job.json
+            state=$(python -c "import json;print(json.load(open('job.json'))['state'])")
+            stage=$(python -c "import json;d=json.load(open('job.json'));print(d.get('stage') or '')")
+            done_n=$(python -c "import json;d=json.load(open('job.json'));print(d.get('completed') or '')")
+            echo "  [$i] $state  $stage  $done_n"
+            case "$state" in
+              succeeded) exit 0 ;;
+              failed) echo "::error::simulation failed"; cat job.json; exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "::error::simulation did not finish within 20 minutes"; exit 1
+
+      - name: Report what it produced
+        env:
+          API: ${{ vars.API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          curl -sS --fail --max-time 60 "$API/race/current" -o race.json
+          python - <<'REPORT'
+          import json, os
+
+          race = json.load(open("race.json"))
+          teams = race.get("teams") or []
+
+          lines = ["## Title race", ""]
+          if race.get("status") != "ok":
+              lines.append(f"Status: `{race.get('status')}`")
+          else:
+              lines.append(f"Season **{race.get('season')}**, after matchweek {race.get('matchweek')}")
+              lines.append("")
+              lines.append("| | Club | Title | Top four | Relegation |")
+              lines.append("|---|---|---|---|---|")
+              for i, t in enumerate(teams[:6], 1):
+                  pct = lambda v: "-" if v is None else f"{v * 100:.1f}%"
+                  lines.append(
+                      f"| {i} | {t['team']} | {pct(t.get('title_prob'))} | "
+                      f"{pct(t.get('top_four_prob'))} | {pct(t.get('relegation_prob'))} |"
+                  )
+              # The identities that must hold. Reported rather than assumed: a
+              # ranking bug would otherwise hide behind twenty plausible numbers.
+              total = sum(t.get("title_prob") or 0 for t in teams)
+              lines += ["", f"Title probabilities sum to **{total:.3f}** (must be 1.000)."]
+
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a", encoding="utf-8") as fh:
+                  fh.write("\n".join(lines) + "\n")
+          print("\n".join(lines))
+          REPORT
