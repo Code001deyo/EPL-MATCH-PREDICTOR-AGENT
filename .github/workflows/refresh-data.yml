@@ -28,6 +28,12 @@ jobs:
   refresh:
     runs-on: ubuntu-latest
     steps:
+      # Needed only for backend/scripts/check_refresh.py. Keeping that logic in a
+      # real file rather than inline in YAML means it can be run and tested
+      # locally, which is how the stale assertion this workflow used to carry
+      # would have been caught.
+      - uses: actions/checkout@v4
+
       - name: Check configuration
         run: |
           test -n "${{ secrets.ADMIN_API_KEY }}" || { echo "::error::repository secret ADMIN_API_KEY is not set"; exit 1; }
@@ -48,19 +54,64 @@ jobs:
           echo "::error::$API/health did not respond within 2 minutes"
           exit 1
 
-      - name: Refresh
+      - name: Start the refresh
         env:
           API: ${{ vars.API_BASE_URL }}
           KEY: ${{ secrets.ADMIN_API_KEY }}
         run: |
           set -euo pipefail
-          # --fail-with-body so an auth failure or a 5xx fails the job loudly
-          # instead of being a green run that silently refreshed nothing.
-          curl -sS --fail-with-body --max-time 300             -X POST "$API/data/refresh"             -H "X-Admin-Key: $KEY"             -o response.json
-          cat response.json
-          # A published season must report "refreshed". "season-not-published" is
-          # the legitimate pre-season case; anything else is a silent failure.
-          grep -qE '"status" *: *"(refreshed|season-not-published)"' response.json             || { echo "::error::unexpected refresh status"; exit 1; }
+          # Refresh is a background job (202 plus a job id), not a synchronous
+          # call. It was synchronous once, and this workflow went on grepping the
+          # old body for '"status": "refreshed"' long after the server stopped
+          # sending one — so every scheduled run failed for eleven days on a
+          # refresh that was in fact starting normally. Poll the job instead:
+          # that is the only thing that can report how the work actually ended.
+          #
+          # 200 with started=false is not an error. It means a refresh was already
+          # in flight and this request joined it; either way we are handed the job
+          # to watch.
+          curl -sS --fail-with-body --max-time 120 \
+            -X POST "$API/data/refresh" -H "X-Admin-Key: $KEY" -o start.json
+          cat start.json
+          job=$(python -c "import json;print(json.load(open('start.json'))['job_id'])")
+          started=$(python -c "import json;print(json.load(open('start.json')).get('started'))")
+          [ "$started" = "True" ] || echo "joined a refresh that was already running"
+          echo "job=$job" >> "$GITHUB_ENV"
+
+      - name: Wait for the refresh
+        env:
+          API: ${{ vars.API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          # Polling is also what keeps a free instance awake for the duration of
+          # the job. Left alone after the POST, the instance can sleep mid-work.
+          for i in $(seq 1 40); do
+            curl -sS --fail --max-time 60 "$API/data/jobs/$job" -o job.json
+            state=$(python -c "import json;print(json.load(open('job.json'))['state'])")
+            stage=$(python -c "import json;d=json.load(open('job.json'));print(d.get('stage') or '')")
+            echo "  [$i] $state  $stage"
+            case "$state" in
+              succeeded) exit 0 ;;
+              # A failed job must fail the run. Without this the workflow goes
+              # green having refreshed nothing, which is exactly the failure mode
+              # that made the previous version worth fixing.
+              failed) echo "::error::refresh failed"; cat job.json; exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "::error::refresh did not finish within 7 minutes"; exit 1
+
+      - name: Check what the refresh did
+        env:
+          API: ${{ vars.API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          curl -sS --fail --max-time 60 "$API/data/jobs/$job" -o job.json
+          # The summary is written by opening GITHUB_STEP_SUMMARY directly rather
+          # than by redirecting stdout: ::error:: annotations are read from a
+          # step's stdout, so redirecting it would swallow the one line that makes
+          # a bad status visible in the run header.
+          python backend/scripts/check_refresh.py
 
       - name: Confirm the data is actually current
         env:

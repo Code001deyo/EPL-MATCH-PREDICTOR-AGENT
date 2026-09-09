@@ -12,6 +12,7 @@ from ratelimit import limit
 from data.features import load_matches, build_feature_vector, prediction_indexes
 from data.ingestion import _current_season_label
 from models.ml_model import predict, get_feature_importance
+from models.fixture_prediction import store_prediction
 
 router = APIRouter()
 
@@ -129,54 +130,22 @@ def predict_fixture(req: PredictRequest, request: Request, db: Session = Depends
     if req.fixture_id is not None and fixture_row:
         actual_score = f"{fixture_row.home_goals}-{fixture_row.away_goals}"
 
-    # ONE prediction per fixture. Re-predicting updates the existing row rather
-    # than appending a new one — before this, clicking Predict on the same match
-    # twice put it in History twice, and the live database had "Arsenal vs Chelsea"
-    # listed under 2026-27 two separate times from ordinary use.
-    #
-    # The key matches settlement's: (season, fixture). Two clubs meet at a given
-    # ground once per campaign, verified unique across all 6,545 stored matches.
-    fixture_label = f"{home_team} vs {away_team}"
-    now = datetime.utcnow().isoformat()
-
-    record = (
-        db.query(Prediction)
-        .filter(Prediction.season == season, Prediction.fixture == fixture_label)
-        .first()
+    # ONE prediction per fixture, keyed (season, "Home vs Away"). The upsert lives
+    # in models/fixture_prediction.py because the notifier writes this table too,
+    # and two writers would drift — which is how History came to list the same
+    # match twice before the invariant existed.
+    known = req.fixture_id is not None and fixture_row is not None
+    record = store_prediction(
+        db,
+        home_team=home_team,
+        away_team=away_team,
+        season=season,
+        matchweek=matchweek,
+        result=result,
+        drivers=drivers,
+        actual_home=fixture_row.home_goals if known else None,
+        actual_away=fixture_row.away_goals if known else None,
     )
-    created = record is None
-    if created:
-        record = Prediction(
-            fixture=fixture_label,
-            season=season,
-            created_at=now,
-            times_predicted=0,
-        )
-        db.add(record)
-
-    # The forecast itself is always replaced: a newer prediction reflects a newer
-    # model and more data, so keeping the older one would be keeping the worse one.
-    record.matchweek = matchweek
-    record.predicted_home = result["predicted_home"]
-    record.predicted_away = result["predicted_away"]
-    record.home_win_prob = result["home_win_prob"]
-    record.draw_prob = result["draw_prob"]
-    record.away_win_prob = result["away_win_prob"]
-    record.confidence = result["confidence"]
-    record.key_drivers = json.dumps(drivers)
-    record.predicted_stats = json.dumps(result.get("predicted_stats", {}))
-    record.times_predicted = (record.times_predicted or 0) + 1
-    record.updated_at = now
-
-    # A settled result is never unset by a re-prediction. Overwriting it with None
-    # for a fixture predicted by team name would silently un-settle a match that
-    # has already been played and scored.
-    if req.fixture_id is not None and fixture_row is not None:
-        record.actual_home = fixture_row.home_goals
-        record.actual_away = fixture_row.away_goals
-
-    db.commit()
-    db.refresh(record)
 
     return {
         "fixture": record.fixture,

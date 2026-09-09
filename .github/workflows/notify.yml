@@ -1,0 +1,125 @@
+name: Send match notifications
+
+# Asks the API what is due and lets it send. Every scheduling decision lives in
+# the backend (backend/notify/queue.py), not here — this workflow deliberately
+# knows nothing about kickoff times.
+#
+# That split is what makes the timing honest. GitHub Actions cron on a public
+# repository drifts five to fifteen minutes, and the free Render instance is
+# asleep between visits, so nothing here can be trusted to fire at a wall-clock
+# moment. It can only be trusted to *ask*, often enough. The API owns the exact
+# kickoff times and a sent-log with a unique index, so asking twice is harmless
+# and asking late still catches the fixture.
+#
+# The result: a pre-match email arrives in a window before kickoff, not exactly
+# ten minutes before. The site says so rather than promising precision this
+# cannot hold. Exact timing needs a paid scheduler.
+on:
+  schedule:
+    # Every five minutes — the finest granularity GitHub Actions offers, and the
+    # value the queue's window in backend/notify/queue.py is sized against.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  # Overlap is safe — the send-once guarantee is a unique index in the database,
+  # not this group — but a queued duplicate only wastes a cold start.
+  group: notify
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check configuration
+        run: |
+          test -n "${{ secrets.ADMIN_API_KEY }}" || { echo "::error::repository secret ADMIN_API_KEY is not set"; exit 1; }
+          test -n "${{ vars.API_BASE_URL }}" || { echo "::error::repository variable API_BASE_URL is not set"; exit 1; }
+
+      - name: Wake the instance
+        env:
+          API: ${{ vars.API_BASE_URL }}
+        run: |
+          for i in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$API/health" || true)
+            [ "$code" = "200" ] && { echo "awake after $((i*10))s"; exit 0; }
+            echo "  attempt $i: HTTP $code"
+            sleep 10
+          done
+          echo "::error::$API/health did not respond within 2 minutes"
+          exit 1
+
+      - name: Ask what is due, and send it
+        env:
+          API: ${{ vars.API_BASE_URL }}
+          KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          # 200 with started=false means a dispatch was already running and this
+          # joined it. Not an error — jobs are single-flight per kind.
+          curl -sS --fail-with-body --max-time 120 \
+            -X POST "$API/notifications/dispatch" -H "X-Admin-Key: $KEY" -o start.json
+          cat start.json
+          job=$(python -c "import json;print(json.load(open('start.json'))['job_id'])")
+          echo "job=$job" >> "$GITHUB_ENV"
+
+      - name: Wait for the dispatch
+        env:
+          API: ${{ vars.API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          # A matchday dispatch makes a prediction for every fixture about to kick
+          # off, so it is not instant. Polling also keeps the instance awake while
+          # it works.
+          for i in $(seq 1 30); do
+            curl -sS --fail --max-time 60 "$API/notifications/jobs/$job" -o job.json
+            state=$(python -c "import json;print(json.load(open('job.json'))['state'])")
+            echo "  [$i] $state"
+            case "$state" in
+              succeeded) exit 0 ;;
+              failed) echo "::error::dispatch failed"; cat job.json; exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "::error::dispatch did not finish within 5 minutes"; exit 1
+
+      - name: Report what was sent
+        env:
+          API: ${{ vars.API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          curl -sS --fail --max-time 60 "$API/notifications/jobs/$job" -o job.json
+          python - <<'REPORT'
+          import json, os
+
+          result = (json.load(open("job.json")).get("result")) or {}
+          pre, post = result.get("pre", {}), result.get("post", {})
+          errors = result.get("errors") or []
+
+          lines = ["## Notifications", ""]
+          if result.get("note"):
+              lines.append(f"_{result['note']}_")
+          lines += [
+              "",
+              "| | Fixtures | Sent | Failed | Already sent |",
+              "|---|---|---|---|---|",
+              f"| Before kickoff | {pre.get('fixtures', 0)} | {pre.get('sent', 0)} | {pre.get('failed', 0)} | {pre.get('skipped', 0)} |",
+              f"| After full time | {post.get('fixtures', 0)} | {post.get('sent', 0)} | {post.get('failed', 0)} | {post.get('skipped', 0)} |",
+          ]
+          if errors:
+              # Surfaced, never absorbed. A fixture the dispatcher could not
+              # handle is a subscriber who did not get their email.
+              lines += ["", "### Fixtures that failed", ""]
+              lines += [f"- {e}" for e in errors]
+
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a", encoding="utf-8") as fh:
+                  fh.write("\n".join(lines) + "\n")
+
+          print(f"pre sent={pre.get('sent', 0)} post sent={post.get('sent', 0)} errors={len(errors)}")
+          # A send that failed is worth an annotation, but not a failed run: the
+          # log row was rolled back, so the next tick retries it.
+          for e in errors:
+              print(f"::warning::{e}")
+          REPORT

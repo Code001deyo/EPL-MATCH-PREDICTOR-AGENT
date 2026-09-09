@@ -1,3 +1,4 @@
+import "./styles/app.css";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
@@ -12,6 +13,7 @@ import Teams from "./pages/Teams";
 import History from "./pages/History";
 import ModelPage from "./pages/ModelPage";
 import Explainer from "./pages/Explainer";
+import TitleRace from "./pages/TitleRace";
 /* Code-split, so the sign-in form, the operator console and the calls they make
  * are in a chunk the public site never downloads. A visitor to the dashboard
  * fetches none of it.
@@ -56,6 +58,7 @@ function Shell() {
             <Route path="/teams"     element={<Teams />} />
             <Route path="/history"   element={<History />} />
             <Route path="/model"     element={<ModelPage />} />
+            <Route path="/race"      element={<TitleRace />} />
             <Route path="/explainer" element={<Explainer />} />
 
             {/* Operator route. Unlinked from anywhere in the app and reachable

@@ -6,6 +6,7 @@ import { useIsNarrow } from "../hooks/useBreakpoint";
 const NAV = [
   { to: "/",          label: "Dashboard"  },
   { to: "/predict",   label: "Predict"    },
+  { to: "/race",      label: "Title race" },
   { to: "/analytics", label: "Analytics"  },
   { to: "/teams",     label: "Teams"      },
   { to: "/history",   label: "History"    },
@@ -66,6 +67,9 @@ export default function Sidebar() {
           {NAV.map(({ to, label }) => (
             <NavLink key={to} to={to} end={to === "/"} style={({ isActive }) => ({
               display: "flex", alignItems: "center",
+              // 44px is the smallest target a thumb hits reliably. Padding alone
+              // gave these 37px, which passed by eye and failed by measurement.
+              minHeight: 44,
               padding: "10px 14px", borderRadius: 8, marginBottom: 2,
               textDecoration: "none", fontSize: 14, fontWeight: 500,
               color: isActive ? C.navy : C.slate300,
