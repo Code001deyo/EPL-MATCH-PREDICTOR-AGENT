@@ -63,14 +63,51 @@ def send_reset_email(reset_url: str, username: str) -> bool:
     return send(to, "EPL Predictor - password reset", text, sender=sender)
 
 
-def send(to: str, subject: str, text: str, html: str | None = None,
-         sender: str | None = None, headers: dict | None = None) -> bool:
-    """Hand one message to Resend. True only if Resend accepted it.
+class SendResult:
+    """What happened to one message.
 
-    The single place an email leaves this process. Returns False and logs the
-    reason rather than raising: a caller sending to a list must be able to record
-    that one address failed and carry on, and must never be able to mistake a
-    rejection for a delivery.
+    Truthy when Resend accepted it, so every existing `if send(...)` caller keeps
+    working unchanged. What it adds is the *reason* for a rejection.
+
+    That reason used to exist only as a `print` into a container log, on a free
+    instance that sleeps and rotates its logs. From outside the process, "nobody
+    subscribed", "the API key is wrong" and "the sending domain is not verified"
+    were indistinguishable - all three were a silent False. A mail path that
+    cannot say why it failed cannot be configured, only guessed at.
+    """
+
+    __slots__ = ("ok", "status", "error", "provider_id")
+
+    def __init__(self, ok: bool, status: int | None = None,
+                 error: str | None = None, provider_id: str | None = None):
+        self.ok = ok
+        self.status = status
+        self.error = error
+        self.provider_id = provider_id
+
+    def __bool__(self) -> bool:
+        return self.ok
+
+    def as_dict(self) -> dict:
+        return {
+            "ok": self.ok,
+            "status": self.status,
+            "error": self.error,
+            "provider_id": self.provider_id,
+        }
+
+    def __repr__(self) -> str:
+        return f"SendResult(ok={self.ok}, status={self.status}, error={self.error!r})"
+
+
+def send(to: str, subject: str, text: str, html: str | None = None,
+         sender: str | None = None, headers: dict | None = None) -> SendResult:
+    """Hand one message to Resend.
+
+    The single place an email leaves this process. Returns a falsy result and
+    logs the reason rather than raising: a caller sending to a list must be able
+    to record that one address failed and carry on, and must never be able to
+    mistake a rejection for a delivery.
     """
     api_key = _env("RESEND_API_KEY")
     sender = sender or _env("NOTIFY_EMAIL_FROM") or _env(
@@ -79,7 +116,7 @@ def send(to: str, subject: str, text: str, html: str | None = None,
     if not api_key:
         print("[mail] CANNOT SEND: RESEND_API_KEY is missing. "
               f"Message to {to} ({subject!r}) was NOT delivered.")
-        return False
+        return SendResult(False, error="RESEND_API_KEY is not set on this instance")
 
     payload = {"from": sender, "to": [to], "subject": subject, "text": text}
     if html:
@@ -99,13 +136,21 @@ def send(to: str, subject: str, text: str, html: str | None = None,
         )
         if response.status_code >= 400:
             # The body carries Resend's reason - an unverified domain, usually.
+            detail = response.text[:300]
             print(f"[mail] Resend rejected {subject!r} to {to}: "
-                  f"HTTP {response.status_code} {response.text[:300]}")
-            return False
-        return True
+                  f"HTTP {response.status_code} {detail}")
+            return SendResult(False, status=response.status_code, error=detail)
+
+        provider_id = None
+        try:
+            provider_id = (response.json() or {}).get("id")
+        except ValueError:
+            pass
+        return SendResult(True, status=response.status_code, provider_id=provider_id)
     except Exception as exc:
-        print(f"[mail] could not reach Resend: {type(exc).__name__}: {exc}")
-        return False
+        reason = f"{type(exc).__name__}: {exc}"
+        print(f"[mail] could not reach Resend: {reason}")
+        return SendResult(False, error=reason)
 
 
 def notifications_configured() -> bool:
@@ -113,7 +158,7 @@ def notifications_configured() -> bool:
     return bool(_env("RESEND_API_KEY"))
 
 
-def send_admin(subject: str, text: str) -> bool:
+def send_admin(subject: str, text: str) -> SendResult:
     """Mail the operator.
 
     Goes to a FIXED address from ADMIN_EMAIL, falling back to RESET_EMAIL_TO, and
@@ -125,5 +170,35 @@ def send_admin(subject: str, text: str) -> bool:
     if not to:
         print(f"[mail] no ADMIN_EMAIL or RESET_EMAIL_TO set; operator notice "
               f"not sent: {subject!r}")
-        return False
+        return SendResult(False, error="neither ADMIN_EMAIL nor RESET_EMAIL_TO is set")
     return send(to, subject, text)
+
+
+def mail_settings() -> dict:
+    """Which mail settings this instance has, by name and presence only.
+
+    Never a value. The question worth answering from outside is "is this
+    configured", and answering it with the secret would mean reading a secret to
+    find out whether a secret exists.
+    """
+    return {
+        "RESEND_API_KEY": bool(_env("RESEND_API_KEY")),
+        "ADMIN_EMAIL": bool(_env("ADMIN_EMAIL")),
+        "RESET_EMAIL_TO": bool(_env("RESET_EMAIL_TO")),
+        "NOTIFY_EMAIL_FROM": bool(_env("NOTIFY_EMAIL_FROM")),
+        # Not a mail setting as such, but every unsubscribe and privacy link in
+        # every message is built on it. Unset means those links have no host,
+        # which is a broken link in bulk mail.
+        "PUBLIC_SITE_URL": bool(_env("PUBLIC_SITE_URL")),
+    }
+
+
+def sender_address() -> str:
+    """The From address messages will actually use.
+
+    Not a secret, and the single most likely cause of a rejection: Resend refuses
+    a domain it has not verified, so this is the first thing to look at when mail
+    stops leaving.
+    """
+    return _env("NOTIFY_EMAIL_FROM") or _env(
+        "RESET_EMAIL_FROM", "EPL Predictor <noreply@hanovatechnologies.co.ke>")

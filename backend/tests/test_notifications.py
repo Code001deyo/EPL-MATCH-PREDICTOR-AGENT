@@ -293,3 +293,79 @@ def test_nothing_is_sent_when_nobody_has_confirmed(db, monkeypatch):
     report = run_dispatch(db)
     assert sent == [], "an unconfirmed address must never receive mail"
     assert report.get("note") == "no confirmed subscribers"
+
+
+# --- a failed send has to say why --------------------------------------
+
+def test_a_send_result_is_falsy_but_carries_the_reason():
+    """Every `if send(...)` caller keeps working; the reason stops being lost.
+
+    A rejection used to be a bare False plus a print into a container log on an
+    instance that sleeps. From outside, an unverified sending domain, a wrong API
+    key and having no subscribers were the same observation: nothing arrived.
+    """
+    from mailer import SendResult
+
+    failed = SendResult(False, status=403, error="domain is not verified")
+    assert not failed
+    assert failed.as_dict()["status"] == 403
+    assert "not verified" in failed.as_dict()["error"]
+
+    ok = SendResult(True, status=200, provider_id="abc-123")
+    assert ok
+    assert ok.as_dict()["provider_id"] == "abc-123"
+
+
+def test_a_missing_api_key_is_reported_as_the_reason(monkeypatch):
+    import mailer
+
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    result = mailer.send("someone@example.com", "subject", "body")
+    assert not result
+    assert "RESEND_API_KEY" in result.error
+
+
+def test_mail_settings_report_presence_and_never_a_value(monkeypatch):
+    """Answering "is this configured" must not require reading the secret."""
+    import mailer
+
+    monkeypatch.setenv("RESEND_API_KEY", "re_a_real_looking_secret")
+    settings = mailer.mail_settings()
+
+    assert settings["RESEND_API_KEY"] is True
+    assert all(isinstance(v, bool) for v in settings.values()), (
+        "a presence report that carries values is a secret leak in a log"
+    )
+    assert "re_a_real_looking_secret" not in repr(settings)
+
+
+def test_the_dispatcher_still_retries_when_a_send_is_refused(db, monkeypatch):
+    """The richer return type must not break the rollback that makes retry work.
+
+    `_send_to_all` claims the send-log row before sending and deletes it again if
+    the send fails. That depends on the result being falsy, which is why
+    SendResult defines __bool__ rather than being a plain dict.
+    """
+    import mailer
+    from mailer import SendResult
+    from notify.dispatch import dispatch as run_dispatch
+
+    _confirmed(db)
+    _fixture(db, minutes_from_now=8)
+    _stored_prediction(db)
+
+    monkeypatch.setattr(mailer, "send",
+                        lambda *a, **kw: SendResult(False, status=403,
+                                                    error="domain not verified"))
+    refused = run_dispatch(db)
+    assert refused["pre"]["failed"] == 1
+    assert refused["pre"]["sent"] == 0
+
+    outbox = []
+    monkeypatch.setattr(mailer, "send",
+                        lambda to, subject, text, **kw: outbox.append(to) or SendResult(True))
+    recovered = run_dispatch(db)
+    assert recovered["pre"]["sent"] == 1, (
+        "a refused send must be retried, not recorded as delivered"
+    )
+    assert outbox == ["fan@example.com"]

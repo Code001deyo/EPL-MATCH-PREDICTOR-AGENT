@@ -1,0 +1,152 @@
+name: Configure the Render service
+
+# Sets the non-secret environment variables the backend needs, using the
+# RENDER_API_KEY already held as a repository secret.
+#
+# It is a workflow rather than a dashboard click because the configuration is
+# then reviewable, repeatable and recorded. A service whose settings live only in
+# somebody's browser session is a service nobody can rebuild.
+#
+# Only non-secret values are set here, and they are visible in this file on
+# purpose: an email address and a site URL are not credentials. Secrets
+# (RESEND_API_KEY, ADMIN_PASSWORD_HASH, SESSION_SECRET, DATABASE_URL) are set in
+# the Render dashboard and are never touched by this workflow.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: configure-service
+  cancel-in-progress: false
+
+env:
+  SERVICE_NAME: epl-predictor-api
+
+  # The operator address. Receives the password-reset link and the automatic
+  # retrain notice, and is the only address either is ever sent to.
+  ADMIN_EMAIL: hanovatechnologies@gmail.com
+  RESET_EMAIL_TO: hanovatechnologies@gmail.com
+
+  # Every unsubscribe and privacy link in every outgoing email is built on this.
+  # Unset, those links have no host and do not resolve, which in bulk mail is
+  # both a broken promise and the fastest route to a spam classification.
+  PUBLIC_SITE_URL: https://novapl.vercel.app
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check configuration
+        run: |
+          test -n "${{ secrets.RENDER_API_KEY }}" || { echo "::error::repository secret RENDER_API_KEY is not set"; exit 1; }
+          test -n "${{ vars.API_BASE_URL }}" || { echo "::error::repository variable API_BASE_URL is not set"; exit 1; }
+
+      - name: Resolve the service id
+        env:
+          TOKEN: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          set -euo pipefail
+          curl -sS --fail --max-time 60 \
+            -H "Authorization: Bearer $TOKEN" \
+            "https://api.render.com/v1/services?name=${SERVICE_NAME}&limit=20" -o services.json
+          id=$(jq -r --arg n "$SERVICE_NAME" \
+            'map(.service | select(.name == $n)) | .[0].id // empty' services.json)
+          if [ -z "$id" ]; then
+            echo "::error::no Render service named ${SERVICE_NAME}"
+            jq -r '.[].service | "  seen: \(.name) (\(.id))"' services.json || true
+            exit 1
+          fi
+          echo "service id: $id"
+          echo "SERVICE_ID=$id" >> "$GITHUB_ENV"
+
+      - name: Set the variables
+        env:
+          TOKEN: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          set -euo pipefail
+          # PUT /v1/services/{id}/env-vars REPLACES THE ENTIRE LIST. Using it
+          # here would silently wipe RESEND_API_KEY, ADMIN_PASSWORD_HASH,
+          # SESSION_SECRET and DATABASE_URL, and the service would come back up
+          # unable to reach its own database.
+          #
+          # The per-key form below touches one variable and leaves the rest
+          # alone. The destructive call is one path segment shorter than the safe
+          # one, which is exactly why this comment is here.
+          set_var() {
+            key="$1"; value="$2"
+            code=$(curl -sS -o "resp-$key.json" -w '%{http_code}' --max-time 60 \
+              -X PUT "https://api.render.com/v1/services/${SERVICE_ID}/env-vars/${key}" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$(jq -nc --arg v "$value" '{value: $v}')")
+            if [ "$code" -ge 400 ]; then
+              echo "::error::setting $key failed with HTTP $code"
+              cat "resp-$key.json"
+              exit 1
+            fi
+            # The value is echoed back by the API; only the key is printed, so a
+            # future secret set through this path could not leak into the log.
+            echo "  set $key (HTTP $code)"
+          }
+
+          set_var ADMIN_EMAIL      "$ADMIN_EMAIL"
+          set_var RESET_EMAIL_TO   "$RESET_EMAIL_TO"
+          set_var PUBLIC_SITE_URL  "$PUBLIC_SITE_URL"
+
+      - name: Wait for the service to come back
+        # Changing environment variables triggers a redeploy. Reporting "set" and
+        # stopping would leave the caller believing the new configuration was
+        # live while the old process was still serving.
+        env:
+          API: ${{ vars.API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          sleep 20
+          for i in $(seq 1 40); do
+            code=$(curl -s -o health.json -w '%{http_code}' --max-time 30 "$API/health" || true)
+            if [ "$code" = "200" ]; then
+              echo "healthy after $((20 + i * 15))s: $(cat health.json)"
+              exit 0
+            fi
+            echo "  [$i] HTTP $code"
+            sleep 15
+          done
+          echo "::error::$API/health did not return within 10 minutes of the change"
+          exit 1
+
+      - name: Confirm the backend now sees the settings
+        # The check that matters. "The API accepted the value" and "the running
+        # process can read it" are different claims, and only the second one is
+        # the thing being asked for.
+        env:
+          API: ${{ vars.API_BASE_URL }}
+          KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          curl -sS --fail --max-time 60 \
+            -X POST "$API/notifications/selftest?send=false" \
+            -H "X-Admin-Key: $KEY" -o settings.json
+          cat settings.json
+          python - <<'CHECK'
+          import json, os, sys
+
+          report = json.load(open("settings.json"))
+          settings = report.get("settings", {})
+          required = ["ADMIN_EMAIL", "RESET_EMAIL_TO", "PUBLIC_SITE_URL"]
+          missing = [k for k in required if not settings.get(k)]
+
+          lines = ["## Render configuration", "",
+                   f"Sender: `{report.get('sender')}`", "",
+                   "| Setting | Present |", "|---|---|"]
+          for key, present in settings.items():
+              lines.append(f"| {key} | {'yes' if present else 'no'} |")
+
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a", encoding="utf-8") as fh:
+                  fh.write("\n".join(lines) + "\n")
+          print("\n".join(lines))
+
+          if missing:
+              print(f"::error::the running backend still does not see: {', '.join(missing)}")
+              sys.exit(1)
+          CHECK

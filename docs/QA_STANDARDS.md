@@ -160,8 +160,11 @@ Listed so the gaps are visible rather than assumed covered.
 - **No automated colour-contrast check.** Contrast was chosen by hand and has not
   been measured. An axe-core pass in the responsive checker would close this.
 - **No end-to-end test of email delivery.** The dispatcher is tested against a
-  stub mailer; nothing has proved a real message arrives, because no
-  `RESEND_API_KEY` or verified sending domain exists yet.
+  stub mailer. A real message has still not been proved to arrive, but the
+  failure is no longer invisible: `POST /notifications/selftest` reports which
+  settings are present and returns the provider's verbatim rejection, so
+  "unverified domain", "wrong key" and "nobody subscribed" are now three
+  distinguishable answers rather than one silent False.
 - **No load or performance budget.** The bundle size is not tracked and no page
   has a time-to-interactive target.
 - **The Championship is not simulated.** The stored fixture list covers the

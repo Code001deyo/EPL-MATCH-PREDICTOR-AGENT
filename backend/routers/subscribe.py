@@ -181,6 +181,56 @@ def dispatch_notifications(response: Response):
     return {"job_id": job["id"], "state": job["state"], "started": created, "job": job}
 
 
+@router.post("/notifications/selftest", dependencies=[Depends(require_admin)])
+def notifications_selftest(send: bool = True):
+    """Say whether this instance can actually send mail, and why not if it cannot.
+
+    Admin-only, because it spends sending quota - the same reason dispatch is.
+
+    Exists because a rejection used to be a `print` into a container log on a
+    free instance that sleeps. From outside, an unverified sending domain, a
+    wrong API key and simply having no subscribers all looked the same: nothing
+    arrived. This turns that into an answer.
+
+    `send=false` reports the configuration without sending anything, which is the
+    safe call to make on a whim.
+    """
+    from mailer import mail_settings, sender_address, send_admin
+
+    report = {
+        "settings": mail_settings(),
+        "sender": sender_address(),
+        "sent": False,
+    }
+
+    # Reported explicitly rather than left to be inferred from a failure: every
+    # unsubscribe and privacy link in every message is built on PUBLIC_SITE_URL,
+    # so an unset value means broken links in bulk mail rather than a bad send.
+    if not report["settings"]["PUBLIC_SITE_URL"]:
+        report["warning"] = (
+            "PUBLIC_SITE_URL is not set, so unsubscribe and privacy links in "
+            "outgoing email have no host and will not resolve."
+        )
+
+    if not send:
+        return report
+
+    result = send_admin(
+        "EPL Predictor - mail self-test",
+        """This is a self-test from the EPL Predictor backend.
+
+If you are reading it, the instance can send mail: the API key works and the
+sending domain is accepted.
+
+-
+EPL Predictor, a product of Hanova Technologies.
+""",
+    )
+    report["sent"] = bool(result)
+    report["result"] = result.as_dict()
+    return report
+
+
 @router.get("/notifications/jobs/{job_id}")
 def notification_job(job_id: str):
     from fastapi import HTTPException
