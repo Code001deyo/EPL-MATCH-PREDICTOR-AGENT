@@ -22,6 +22,10 @@ on:
         description: "Simulated seasons per snapshot"
         type: string
         default: "10000"
+      season:
+        description: "Season to simulate, e.g. 2025-26. Blank means the current one."
+        type: string
+        default: ""
 
 concurrency:
   # The server is single-flight per job kind anyway — a second request joins the
@@ -59,7 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           curl -sS --fail-with-body --max-time 120 \
-            -X POST "$API/race/simulate?simulations=${{ inputs.simulations }}&backfill=${{ inputs.backfill }}" \
+            -X POST "$API/race/simulate?simulations=${{ inputs.simulations }}&backfill=${{ inputs.backfill }}&season=${{ inputs.season }}" \
             -H "X-Admin-Key: $KEY" -o start.json
           cat start.json
           job=$(python -c "import json;print(json.load(open('start.json'))['job_id'])")

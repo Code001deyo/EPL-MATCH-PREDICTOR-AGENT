@@ -106,7 +106,7 @@ def history(season: str = None, team: str = Query(None),
 
 @router.post("/simulate", status_code=202, dependencies=[Depends(require_admin)])
 def simulate(response: Response, simulations: int = 10_000,
-             backfill: bool = False):
+             backfill: bool = False, season: str = None):
     """Re-run the simulation. Admin-only: it is thirty seconds of CPU.
 
     `backfill=true` also reconstructs every completed matchweek. That is a
@@ -117,13 +117,15 @@ def simulate(response: Response, simulations: int = 10_000,
 
         db = SessionLocal()
         try:
-            season = _current_season_label()
+            # Blank means the current campaign. A past season is reconstructed
+            # entirely from `match_results`, which is complete for it.
+            target = season or _current_season_label()
 
             def progress(done, total):
                 jobs.progress(job_id, stage="pricing fixtures", done=done,
                               total=total, unit="fixtures")
 
-            out = season_sim.run(db, season, simulations=simulations,
+            out = season_sim.run(db, target, simulations=simulations,
                                  on_progress=progress)
             if out["status"] != "ok":
                 return out
@@ -133,14 +135,14 @@ def simulate(response: Response, simulations: int = 10_000,
             # this ran. Two simulations of the same matchweek must land on the
             # same point of the time axis, or re-running the job would slide the
             # curve sideways and invent movement.
-            ends = season_history.matchweek_ended_at(db, season)
-            race_db.save_snapshot(db, season, out["matchweek"], out["teams"],
+            ends = season_history.matchweek_ended_at(db, target)
+            race_db.save_snapshot(db, target, out["matchweek"], out["teams"],
                                   kind=race_db.KIND_LIVE, simulations=simulations,
                                   as_of=ends.get(out["matchweek"]))
 
             if backfill:
                 jobs.progress(job_id, stage="reconstructing earlier matchweeks")
-                out["backfill"] = season_history.backfill(db, season)
+                out["backfill"] = season_history.backfill(db, target)
 
             # The teams list is dropped from the job result: it is already stored
             # and readable at /race/current, and a job payload is not the place
