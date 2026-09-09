@@ -363,3 +363,68 @@ costs less than the alternative.
 - [ ] Deployed pages diffed against the pre-release capture — cannot complete
       until the frontend deploys
 - [ ] `npm run qa:responsive https://novapl.vercel.app` — same
+
+### Frontend deployed — the block cleared
+
+`vercel login` unblocked it. Built locally with `REACT_APP_COMMIT` stamped in and
+deployed from source with `--build-env`, mirroring what `deploy-vercel.yml` does,
+then aliased to `novapl.vercel.app`.
+
+Deploying the prebuilt `build/` folder does **not** work here: `frontend/vercel.json`
+sets a `buildCommand`, so Vercel re-runs it inside the uploaded output directory,
+which has no `package.json`, and the deploy fails with exit 254. Deploy from
+source and pass the commit through `--build-env`.
+
+Verified the way the workflow verifies it — by the `build-commit` meta tag, not by
+a 200. Every non-`/api` path rewrites to `index.html`, so a 200 from `/race`
+proves only that the app shell loaded. That is exactly how a missing page went
+unnoticed before.
+
+```
+[1] serving: 9e0dc9699c9056536192961891ff6d43dea7c60b
+VERIFIED: novapl.vercel.app is serving 9e0dc969
+```
+
+### The page diff caught a real difference
+
+`npm run qa:responsive https://novapl.vercel.app` passed 18/18, but the race page
+measured **3,066 characters against 4,554 locally**. Not a layout fault — the
+production database held a single snapshot, so the page correctly rendered
+"Only one matchweek stored so far" instead of a chart. The honest empty state was
+working; the backfill had simply never run there.
+
+This is the whole argument for diffing deployed pages rather than checking that
+they load. Both versions were "working"; only the character count said one was
+missing its main feature.
+
+Fixed by `simulate-race.yml`, added for the purpose — a workflow rather than a
+documented `curl`, because the admin key is a repository secret and routine work
+should not require pasting it into a terminal. Production now holds MW1–MW3 for
+every club:
+
+```
+MW1  25.1%  [backfill]    MW2  25.9%  [backfill]    MW3  30.6%  [live]
+sum of title probabilities: 1.0
+```
+
+Re-run: race page 4,561 characters, matching local. 18/18 clean.
+
+### Post-deploy gates — all met
+
+- [x] `/health` reports the pushed commit (`faff52b9`)
+- [x] Frontend serves the pushed commit (`9e0dc969`), checked by meta tag
+- [x] New endpoints answer 200, through the production proxy as well as directly
+- [x] Retrain and backtest completed on production
+- [x] Notification dispatch runs clean and sends nothing it should not
+- [x] Deployed pages diffed against the pre-release capture — one real difference
+      found, explained and fixed
+- [x] `npm run qa:responsive` clean against production, 18/18
+
+### Still outstanding
+
+- **`VERCEL_TOKEN` is still not a repository secret.** This deploy went out from a
+  logged-in CLI, so the *automated* path remains broken and the next push will not
+  deploy the frontend. Setting it is one command: `gh secret set VERCEL_TOKEN`.
+- **No email has been proved to arrive.** `RESEND_API_KEY` is set and the subscribe
+  box is open in production, but nothing has been sent to a real address, so the
+  sending domain is unverified in practice.
