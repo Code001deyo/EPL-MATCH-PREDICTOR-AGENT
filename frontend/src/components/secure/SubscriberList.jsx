@@ -77,7 +77,13 @@ export default function SubscriberList() {
 
       {data && data.subscribers.length > 0 && (
         <div className="pl-scroll-x">
-          <table className="pl-table">
+          {/* pl-stack-table: below 720px each row becomes a block with its column
+              name as a label, using the data-label on every cell. Without it the
+              five columns scroll sideways inside .pl-scroll-x and an operator on
+              a phone has to drag the table right to reach Unsubscribe and Erase.
+              The treatment already existed in the stylesheet and nothing had
+              used it. */}
+          <table className="pl-table pl-stack-table">
             <thead>
               <tr>
                 <th scope="col">Address</th>

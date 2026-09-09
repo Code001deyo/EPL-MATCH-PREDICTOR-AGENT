@@ -21,7 +21,7 @@ export default function RaceLeaderboard({ teams, showChange = true }) {
 
   return (
     <div className="pl-scroll-x" style={{ marginTop: 20 }}>
-      <table className="pl-table">
+      <table className="pl-table pl-table--race">
         <thead>
           <tr>
             <th className="pl-num" scope="col">Pos</th>

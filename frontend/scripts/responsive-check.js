@@ -84,6 +84,23 @@ const MIN_TAP = 44;
 // violating it is not a rule. This catches an accident and permits a decision.
 const MIN_FONT_PX = 9;
 
+/* The operator console, checked only when a key is available.
+ *
+ * It is behind a sign-in, so the sweep had never loaded it - and it holds the
+ * widest table in the app, the five-column subscriber list, whose stacking rules
+ * below 620px had never been exercised against real content.
+ *
+ * `require_admin` in backend/auth.py accepts an X-Admin-Key header as well as a
+ * session cookie, so the page can be rendered by setting that header on every
+ * request rather than by driving a login form with a password.
+ *
+ * Skipped rather than failed when the key is absent: CI serves a static build
+ * with no backend behind it, where an authenticated page cannot be checked and
+ * its absence is not a defect.
+ */
+const ADMIN_KEY = process.env.ADMIN_API_KEY || "";
+const ADMIN_PAGES = ADMIN_KEY ? [{ name: "console", path: "/secure-model" }] : [];
+
 /* Console errors that are not defects in the page.
  *
  * CI serves the production bundle with no backend behind it, so every API call
@@ -126,6 +143,24 @@ function audit(minTap, isTouch, minFont) {
   const tooWide = [];
   const smallTaps = [];
   const tinyText = [];
+
+  // A control that is present but display:none is worse than a missing one: the
+  // page looks complete and the action is unreachable. This is not theoretical -
+  // a column-hiding rule written for the race table's nine columns was applied to
+  // every table, and on the subscriber list column five is Actions, so an
+  // operator on a phone could read the list and not act on it.
+  const hiddenControls = [];
+  for (const el of document.querySelectorAll("button, a[href], select, input")) {
+    // The *cell* is what a column rule hides, and the cell is what has to be
+    // tested. A control inside a display:none subtree keeps its own computed
+    // display - "inline-block", not "none" - so asking the control whether it is
+    // hidden always answered no. The first version of this check did exactly
+    // that and passed straight over the bug it was written for.
+    const cell = el.closest("td, th");
+    if (cell && getComputedStyle(cell).display === "none") {
+      hiddenControls.push(describe(el));
+    }
+  }
 
   for (const el of document.querySelectorAll("body *")) {
     const box = el.getBoundingClientRect();
@@ -183,6 +218,7 @@ function audit(minTap, isTouch, minFont) {
   return {
     overflow,
     tinyText: [...new Set(tinyText)].slice(0, 6),
+    hiddenControls: [...new Set(hiddenControls)].slice(0, 6),
     scrollWidth: doc.scrollWidth,
     innerWidth: window.innerWidth,
     tooWide: [...new Set(tooWide)].slice(0, 8),
@@ -206,7 +242,7 @@ function audit(minTap, isTouch, minFont) {
   let checks = 0;
 
   for (const view of VIEWPORTS) {
-    for (const target of PAGES) {
+    for (const target of [...PAGES, ...ADMIN_PAGES]) {
       const page = await browser.newPage();
       await page.setViewport({
         width: view.width,
@@ -214,6 +250,10 @@ function audit(minTap, isTouch, minFont) {
         hasTouch: view.touch,
         isMobile: view.touch,
       });
+
+      if (ADMIN_KEY && target.path.startsWith("/secure")) {
+        await page.setExtraHTTPHeaders({ "X-Admin-Key": ADMIN_KEY });
+      }
 
       const consoleErrors = [];
       page.on("console", (m) => {
@@ -256,6 +296,9 @@ function audit(minTap, isTouch, minFont) {
         }
         if (result.tinyText.length) {
           failures.push(`${label}: text under ${MIN_FONT_PX}px — ${result.tinyText.join(", ")}`);
+        }
+        if (result.hiddenControls.length) {
+          failures.push(`${label}: controls hidden by a layout rule — ${result.hiddenControls.join(", ")}`);
         }
         if (consoleErrors.length) {
           failures.push(`${label}: console errors — ${consoleErrors.slice(0, 3).join(" | ")}`);

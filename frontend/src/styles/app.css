@@ -336,16 +336,23 @@ input:not([type="hidden"]),
 
 /* Below the phone breakpoint the least-load-bearing columns go rather than the
    table being squeezed until every column is unreadable. Position, club, points
-   and title probability are what the page is for. */
+   and title probability are what the race page is for.
+   
+   Scoped to .pl-table--race, and that scoping is not tidiness. These nth-child
+   positions describe the race table's nine columns. Applied to every .pl-table
+   they hit whatever happens to sit in those slots - on the subscriber table
+   column five is Actions, so an operator on a phone could see the list and had
+   no way to unsubscribe or erase anyone. A layout rule that hides a control is a
+   functional bug, and a generic selector is how it travelled. */
 @media (max-width: 620px) {
-  .pl-table th:nth-child(3),
-  .pl-table td:nth-child(3),
-  .pl-table th:nth-child(5),
-  .pl-table td:nth-child(5),
-  .pl-table th:nth-child(7),
-  .pl-table td:nth-child(7),
-  .pl-table th:nth-child(8),
-  .pl-table td:nth-child(8) {
+  .pl-table--race th:nth-child(3),
+  .pl-table--race td:nth-child(3),
+  .pl-table--race th:nth-child(5),
+  .pl-table--race td:nth-child(5),
+  .pl-table--race th:nth-child(7),
+  .pl-table--race td:nth-child(7),
+  .pl-table--race th:nth-child(8),
+  .pl-table--race td:nth-child(8) {
     display: none;
   }
 
