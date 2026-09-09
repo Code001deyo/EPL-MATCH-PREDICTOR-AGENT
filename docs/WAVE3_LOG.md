@@ -428,3 +428,74 @@ Re-run: race page 4,561 characters, matching local. 18/18 clean.
 - **No email has been proved to arrive.** `RESEND_API_KEY` is set and the subscribe
   box is open in production, but nothing has been sent to a real address, so the
   sending domain is unverified in practice.
+
+---
+
+## Design review round (2026-09-09)
+
+Seven changes, from a review of the deployed site.
+
+**Em dashes gone.** 49 files, all rendered text and every email. Removed from
+user-facing strings and from the `-` placeholder used for a missing value.
+Comments still contain them; they are not rendered and sweeping them would be a
+large diff with no visible effect.
+
+**The circled-i tooltips are gone.** They read as small badges beside every
+heading. The context they held is not lost: the standings became a real table
+with scoped headers, which does the job the hidden per-row sentence was doing.
+
+**Subscribe copy cut.** Three paragraphs to two lines. The one caveat kept is the
+timing one, because it is a promise being made to someone deciding to sign up.
+
+**Real club badges.** The official crests from the Premier League CDN. The URL
+keys on an **Opta** id, which is not the id PulseLive puts in fixture payloads
+(Arsenal is `1` there, `t3` on the CDN), so `data/clubs.py` syncs it from
+`/teams` into a `clubs` table. Not hardcoded: a hardcoded map goes wrong the
+summer three clubs are promoted, and goes wrong silently, as a club wearing
+another club's badge. 36 clubs across 13 seasons, all resolved, so relegated
+clubs keep their badge in history.
+
+These crests are trademarks and that is true whatever the project is for. The
+decision to use them for a non-commercial build is recorded in `db/clubs.py`
+rather than quietly dropped, and nothing is copied into the repository - the page
+points at the source. The drawn monogram stays as the fallback for a club the
+sync has not seen and for a CDN that stops answering.
+
+**Real tables.** Position, badge, club, then numbers right-aligned with tabular
+figures so a column reads down rather than cell by cell. Scoped `<th>` so a
+screen reader says "Arsenal, Points, 9". Below 620px the least load-bearing
+columns are dropped rather than every column being squeezed. Crests on the league
+table and the fixture list too.
+
+**Previous seasons.** A season picker, with 2024-25 and 2025-26 reconstructed in
+full, locally and in production. A past season needs no fixture list:
+`match_results` is complete for it. Their timestamps come from the results
+instead, at 19:00 UTC on the day of a matchweek's last match - approximate in the
+hour, exact in the day, and only ever used to place a point on a time axis.
+Without it every point of a past season carried the moment the backfill ran and
+the season collapsed onto a single day.
+
+`simulate-race.yml` gained a season input, because the workflow could only
+reconstruct the current campaign and a deployed instance therefore had one season
+in its picker while local had three.
+
+### Two defects the checks caught, not the eye
+
+- **Goal difference had never been returned.** Stored since the first version,
+  absent from `series()`, so the standings rendered an empty GD column for every
+  club.
+- **The new select and segmented buttons were 36px** against the project's own
+  44px control rule. Rather than bulk them up on desktop, the rule now applies
+  where it belongs: 44px under `pointer: coarse`, the WCAG 2.5.8 floor of 24px
+  otherwise, with the checker asking the same question. A CSS ordering mistake
+  meant the first attempt silently did nothing, which the checker also caught.
+
+### Verified
+
+- 243 backend, 15 frontend, 18/18 viewports, locally and against production.
+- Frontend `8b5fb55e` and backend `c8f57e27` confirmed live by commit, not by
+  latency.
+- Local and production render byte-identical race pages (2,597 characters at
+  1920px on both). The earlier 4,554 was the pre-table layout; the table is
+  denser, not missing anything.
+- Zero em dashes in the deployed JavaScript bundle.
