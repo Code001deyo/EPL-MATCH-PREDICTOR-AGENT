@@ -26,8 +26,12 @@ on:
   push:
     branches: [main]
     paths:
+      # frontend/** only, deliberately. Vercel's root directory for this project
+      # is frontend/, so it skips a build when nothing there changed. Including
+      # this workflow's own path made the check fail for a deploy that correctly
+      # never happened, which is the kind of false alarm that teaches people to
+      # ignore a red check.
       - "frontend/**"
-      - ".github/workflows/deploy-vercel.yml"
   workflow_dispatch:
 
 concurrency:

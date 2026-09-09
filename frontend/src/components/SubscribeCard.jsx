@@ -95,7 +95,6 @@ export default function SubscribeCard() {
       <p className="pl-subscribe-note">
         Sent shortly before kickoff, not at an exact minute. We store your address
         and nothing else - <a href="/privacy" style={{ color: "#00ff85", fontWeight: 600 }}>privacy</a>.
-        {status?.confirmed > 0 && ` ${status.confirmed} subscribed.`}
       </p>
     </section>
   );

@@ -152,21 +152,23 @@ def unsubscribe(token: str = "", db: Session = Depends(get_db)):
 
 
 @router.get("/subscribe/status")
-def subscriber_status(db: Session = Depends(get_db)):
-    """Counts only - never addresses.
+def subscriber_status():
+    """Whether sign-ups can be accepted. Nothing about who has signed up.
 
-    Public so the site can say how many people follow the predictions. Returning
-    the list would publish everyone's email.
+    This used to return the number of confirmed subscribers, and the sign-up box
+    printed it. That is nobody's business but the operator's: on a small list it
+    advertises exactly how small, and it is a fact about the service rather than
+    anything the person deciding whether to subscribe needs.
+
+    The count still exists, in the operator console behind the admin sign-in.
+
+    What is left is one boolean, and it earns its place: it is the difference
+    between "nobody subscribed" and "nothing can be sent", so the UI can close
+    the form instead of accepting an address it cannot mail.
     """
     from mailer import notifications_configured
 
-    return {
-        "confirmed": len(subs.active_subscribers(db)),
-        # A configured mailer is the difference between "nobody subscribed" and
-        # "nothing can be sent". The UI should not offer a subscribe box that
-        # silently cannot deliver.
-        "delivery_configured": notifications_configured(),
-    }
+    return {"delivery_configured": notifications_configured()}
 
 
 @router.post("/notifications/dispatch", status_code=202,
