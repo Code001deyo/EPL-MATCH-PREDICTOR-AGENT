@@ -13,6 +13,20 @@ single fastest way to lose a reader's trust.
 
 from __future__ import annotations
 
+import os
+
+
+def privacy_url() -> str:
+    """Where the privacy policy lives.
+
+    Built from PUBLIC_SITE_URL so it points at whichever instance sent the mail.
+    Bulk email that does not say who sent it, how to leave and where the policy
+    is reads as spam to a filter and to a person.
+    """
+    base = (os.environ.get("PUBLIC_SITE_URL") or "").rstrip("/")
+    return f"{base}/privacy"
+
+
 # Probability is reported to whole percentages. The model does not distinguish
 # 52.3% from 52.7% in any meaningful way, and rendering a decimal implies a
 # precision the backtest does not support.
@@ -33,6 +47,7 @@ def pre_match(fixture, pred: dict, unsubscribe_url: str) -> tuple[str, str]:
     home, away = fixture.home_team, fixture.away_team
     subject = f"{home} v {away} - the model's call"
 
+    policy = privacy_url()
     scoreline = f"{pred.get('predicted_home')}-{pred.get('predicted_away')}"
     kickoff = fixture.kickoff_label or fixture.kickoff_utc or "time to be confirmed"
 
@@ -49,7 +64,9 @@ the honest version of the same prediction.
 You will get the result and how this call went once the match finishes.
 
 -
-Stop these emails: {unsubscribe_url}
+EPL Score Predictor, a product of Hanova Technologies.
+Unsubscribe: {unsubscribe_url}
+Privacy: {policy}
 """
     return subject, body
 
@@ -58,6 +75,7 @@ def post_match(fixture, pred: dict | None, home_goals: int, away_goals: int,
                unsubscribe_url: str) -> tuple[str, str]:
     """(subject, body) for the message sent after the final whistle."""
     home, away = fixture.home_team, fixture.away_team
+    policy = privacy_url()
     actual = f"{home_goals}-{away_goals}"
     subject = f"{home} {home_goals}-{away_goals} {away}"
 
@@ -72,7 +90,9 @@ No prediction was recorded for this fixture, so there is nothing to score it
 against.
 
 -
-Stop these emails: {unsubscribe_url}
+EPL Score Predictor, a product of Hanova Technologies.
+Unsubscribe: {unsubscribe_url}
+Privacy: {policy}
 """
 
     predicted = f"{pred.get('predicted_home')}-{pred.get('predicted_away')}"
@@ -105,7 +125,9 @@ One match says very little either way. The model's record over every completed
 matchweek is on the site, which is the number worth judging it by.
 
 -
-Stop these emails: {unsubscribe_url}
+EPL Score Predictor, a product of Hanova Technologies.
+Unsubscribe: {unsubscribe_url}
+Privacy: {policy}
 """
     return subject, body
 
@@ -125,5 +147,10 @@ You will get two emails per match you follow: the prediction shortly before
 kickoff, and the result with how the call went shortly after the final whistle.
 
 If this was not you, ignore this email. Nothing is sent to an address that has
-not confirmed, so no further messages will arrive.
+not confirmed, so there is nothing to unsubscribe from and no further messages
+will arrive.
+
+-
+EPL Score Predictor, a product of Hanova Technologies.
+Privacy: {privacy_url()}
 """)

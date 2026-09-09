@@ -14,6 +14,7 @@ import History from "./pages/History";
 import ModelPage from "./pages/ModelPage";
 import Explainer from "./pages/Explainer";
 import TitleRace from "./pages/TitleRace";
+import Privacy from "./pages/Privacy";
 /* Code-split, so the sign-in form, the operator console and the calls they make
  * are in a chunk the public site never downloads. A visitor to the dashboard
  * fetches none of it.
@@ -59,6 +60,7 @@ function Shell() {
             <Route path="/history"   element={<History />} />
             <Route path="/model"     element={<ModelPage />} />
             <Route path="/race"      element={<TitleRace />} />
+            <Route path="/privacy"   element={<Privacy />} />
             <Route path="/explainer" element={<Explainer />} />
 
             {/* Operator route. Unlinked from anywhere in the app and reachable

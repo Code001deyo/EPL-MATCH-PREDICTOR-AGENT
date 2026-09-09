@@ -99,14 +99,47 @@ def retrain_model(response: Response, db: Session = Depends(get_db)):
             # it sat there for fifteen minutes on the deployed instance.
             feature_df = build_training_matrix(matches, on_progress=_reporter(job_id))
             jobs.progress(job_id, stage="training", done=0, total=12, unit="models")
+            metrics = train(
+                feature_df,
+                on_progress=lambda stage, done, total: jobs.progress(
+                    job_id, stage=stage, done=done, total=total, unit="models"
+                ),
+            )
+
+            # Stamp how far through the season this model was trained, so
+            # "is the model stale" has an answer. Written only after training
+            # succeeded: a watermark ahead of the model would stop the scheduler
+            # ever retraining it.
+            watermark = None
+            try:
+                from data.ingestion import _current_season_label
+                from models.training_state import completed_matchweek, write_state
+
+                stamp_session = SessionLocal()
+                try:
+                    season = _current_season_label()
+                    watermark = write_state(
+                        season, completed_matchweek(stamp_session, season)
+                    )
+                finally:
+                    stamp_session.close()
+            except Exception as exc:
+                # A failed stamp must not fail a successful retrain. The cost is
+                # one redundant retrain next time, which is cheap.
+                print(f"[retrain] could not record training watermark: {exc}")
+
+            # Tell the operator, so an automatic retrain is not a silent one.
+            # A scheduled job that nobody hears from is a job nobody notices has
+            # stopped.
+            try:
+                _notify_operator(watermark, metrics, int(len(feature_df)))
+            except Exception as exc:
+                print(f"[retrain] could not send the operator notice: {exc}")
+
             return {
                 "samples": int(len(feature_df)),
-                "metrics": train(
-                    feature_df,
-                    on_progress=lambda stage, done, total: jobs.progress(
-                        job_id, stage=stage, done=done, total=total, unit="models"
-                    ),
-                ),
+                "metrics": metrics,
+                "trained_through": watermark,
             }
         finally:
             session.close()
@@ -203,6 +236,85 @@ def backtest_report(season: str = None, db: Session = Depends(get_db)):
     summary = summarize(results)
     summary["run_at"] = rows[0].run_at if rows else None
     return summary
+
+
+NEWLINE = chr(10)
+
+
+def _notify_operator(watermark, metrics, samples: int) -> None:
+    """Email the operator what a retrain produced.
+
+    Deliberately carries the numbers rather than "retrain complete". A notice
+    with no figures in it teaches the reader to stop opening them, and the point
+    of this one is that a bad retrain should be noticeable.
+    """
+    from mailer import send_admin
+
+    season = (watermark or {}).get("season", "unknown")
+    matchweek = (watermark or {}).get("trained_through_matchweek", "unknown")
+
+    accuracy = None
+    if isinstance(metrics, dict):
+        outcome = metrics.get("outcome") or {}
+        accuracy = outcome.get("correct_result_pct") or metrics.get("correct_result_pct")
+
+    lines = [
+        f"The model retrained automatically after matchweek {matchweek} of {season}.",
+        "",
+        f"  Training rows      {samples}",
+    ]
+    if accuracy is not None:
+        lines.append(f"  Result accuracy    {accuracy}%")
+    lines += [
+        "",
+        "Worth a look if the accuracy has moved sharply in either direction: a",
+        "jump is as likely to mean something broke upstream as it is to mean the",
+        "model improved.",
+        "",
+        "-",
+        "EPL Score Predictor, a product of Hanova Technologies.",
+    ]
+    send_admin(f"Model retrained - {season} matchweek {matchweek}", NEWLINE.join(lines))
+
+
+@router.get("/staleness")
+def model_staleness(db: Session = Depends(get_db)):
+    """How far behind the season the running model is.
+
+    Public: it says how current the predictions are, which is the sort of thing a
+    reader is entitled to know without an account.
+    """
+    from data.ingestion import _current_season_label
+    from models.training_state import staleness
+
+    return staleness(db, _current_season_label())
+
+
+@router.post("/retrain-if-stale", status_code=202,
+             dependencies=[Depends(require_admin)])
+def retrain_if_stale(response: Response, db: Session = Depends(get_db)):
+    """Retrain only if a matchweek has completed since the last training.
+
+    This is what turns retraining from something an operator remembers into
+    something that happens. Called on a schedule; it decides, so the schedule does
+    not have to know anything about matchweeks.
+
+    Returns 200 and does nothing when the model is current. Retraining an
+    unchanged model would burn ten minutes of a 0.1 vCPU instance to produce the
+    same estimators.
+    """
+    from data.ingestion import _current_season_label
+    from models.training_state import staleness
+
+    season = _current_season_label()
+    state = staleness(db, season)
+
+    if not state["stale"]:
+        response.status_code = 200
+        return {"status": "up-to-date", **state}
+
+    started = retrain_model(response, db)
+    return {"status": "retraining", **state, **started}
 
 
 @router.get("/metrics")

@@ -249,12 +249,17 @@ export default function TitleRace() {
                       return (
                         <Line
                           key={team}
-                          type={granularity === "matchweek" ? "monotone" : "stepAfter"}
+                          // Monotone at every resolution, matching the accuracy
+                          // and scoring trends elsewhere on the site: a curve
+                          // that passes through its points without overshooting
+                          // between them. Dots are off, so twenty lines read as
+                          // lines rather than as a field of markers.
+                          type="monotone"
                           dataKey={team}
                           stroke={clubIdentity(team).primary}
                           strokeWidth={major ? 2.5 : 1.25}
-                          strokeOpacity={major ? 1 : 0.45}
-                          dot={major ? { r: 2.5, strokeWidth: 0 } : false}
+                          strokeOpacity={major ? 1 : 0.4}
+                          dot={false}
                           activeDot={{ r: 5 }}
                           connectNulls
                           // No entry animation. Three reasons, in order of
@@ -274,12 +279,10 @@ export default function TitleRace() {
 
                 {granularity !== "matchweek" && (
                   <p className="pl-caveat">
-                    Drawn as steps, not slopes. A title probability does not drift
-                    with the clock - it moves when matches are played and holds
-                    still in between, so each point sits at the moment its
-                    matchweek's last match finished. A sloping line would claim the
-                    odds were changing on the Tuesday, and re-simulating hourly to
-                    make the line wander would only be drawing sampling noise.
+                    Each point sits at the moment its matchweek's last match
+                    finished. A title probability only moves when matches are
+                    played, so the curve between two points is drawn for
+                    readability and is not a claim about the days in between.
                   </p>
                 )}
               </div>

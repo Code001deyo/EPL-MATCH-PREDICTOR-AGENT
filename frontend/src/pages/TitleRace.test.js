@@ -126,10 +126,12 @@ describe("TitleRace", () => {
     fireEvent.click(monthly);
     expect(monthly).toHaveAttribute("aria-pressed", "true");
 
-    // Switching off matchweeks must say why the line is a step rather than a
-    // slope, or the chart quietly implies the odds move between matches.
+    // Switching off matchweeks must still say what the curve between two points
+    // is, or a smooth line quietly implies the odds drift between matches.
     await waitFor(() =>
-      expect(screen.getByText(/Drawn as steps, not slopes/i)).toBeInTheDocument()
+      expect(
+        screen.getByText(/not a claim about the days in between/i)
+      ).toBeInTheDocument()
     );
   });
 

@@ -1,0 +1,160 @@
+name: Retrain after a matchweek
+
+# Retraining used to be something an operator remembered to do. The model
+# therefore sat on last month's data for as long as nobody thought about it, and
+# nothing on the site said so: the numbers looked exactly as current as they
+# always do.
+#
+# This asks the API whether a matchweek has completed since the last training and
+# lets it decide. The workflow knows nothing about matchweeks, which is the same
+# split the notification cron uses - a trigger can be trusted to ask often
+# enough, never to know when.
+#
+# The API answers 200 and does nothing when the model is current. Retraining an
+# unchanged model would spend ten minutes of a 0.1 vCPU instance producing the
+# same estimators.
+on:
+  schedule:
+    # Monday and Tuesday mornings. A Premier League matchweek is normally
+    # finished by late Monday, so this is the first quiet moment after one ends,
+    # and it runs twice in case a Monday fixture is postponed to Tuesday.
+    - cron: "0 6 * * 1,2"
+    # Thursday, for a midweek round.
+    - cron: "0 6 * * 4"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Retrain even if the model is already current"
+        type: boolean
+        default: false
+
+concurrency:
+  # Retraining is single-flight server-side, so an overlap joins rather than
+  # races. A queued duplicate only wastes a cold start.
+  group: auto-retrain
+  cancel-in-progress: false
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check configuration
+        run: |
+          test -n "${{ secrets.ADMIN_API_KEY }}" || { echo "::error::repository secret ADMIN_API_KEY is not set"; exit 1; }
+          test -n "${{ vars.API_BASE_URL }}" || { echo "::error::repository variable API_BASE_URL is not set"; exit 1; }
+
+      - name: Wake the instance
+        env:
+          API: ${{ vars.API_BASE_URL }}
+        run: |
+          for i in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$API/health" || true)
+            [ "$code" = "200" ] && { echo "awake after $((i*10))s"; exit 0; }
+            echo "  attempt $i: HTTP $code"
+            sleep 10
+          done
+          echo "::error::$API/health did not respond within 2 minutes"
+          exit 1
+
+      - name: Report how far behind the model is
+        # Printed before deciding anything, so a run that does nothing still says
+        # why. "No retrain needed" and "the check is broken" look identical
+        # otherwise.
+        env:
+          API: ${{ vars.API_BASE_URL }}
+        run: |
+          curl -sS --fail --max-time 60 "$API/model/staleness" -o staleness.json
+          cat staleness.json
+
+      - name: Retrain if a matchweek has completed
+        id: start
+        env:
+          API: ${{ vars.API_BASE_URL }}
+          KEY: ${{ secrets.ADMIN_API_KEY }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          endpoint="model/retrain-if-stale"
+          [ "${FORCE:-false}" = "true" ] && endpoint="model/retrain"
+
+          curl -sS --fail-with-body --max-time 120 \
+            -X POST "$API/$endpoint" -H "X-Admin-Key: $KEY" -o start.json
+          cat start.json
+
+          status=$(python -c "import json;print(json.load(open('start.json')).get('status',''))")
+          if [ "$status" = "up-to-date" ]; then
+            echo "the model is already trained through the latest completed matchweek"
+            echo "retraining=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          job=$(python -c "import json;print(json.load(open('start.json'))['job_id'])")
+          echo "job=$job" >> "$GITHUB_ENV"
+          echo "retraining=true" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for the retrain
+        if: steps.start.outputs.retraining == 'true'
+        env:
+          API: ${{ vars.API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 120); do
+            curl -sS --fail --max-time 60 "$API/model/jobs/$job" -o job.json
+            state=$(python -c "import json;print(json.load(open('job.json'))['state'])")
+            stage=$(python -c "import json;d=json.load(open('job.json'));print(d.get('stage') or '')")
+            echo "  [$i] $state  $stage"
+            case "$state" in
+              succeeded) exit 0 ;;
+              failed) echo "::error::retrain failed"; cat job.json; exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "::error::retrain did not finish within 30 minutes"; exit 1
+
+      - name: Report what changed
+        if: always()
+        env:
+          API: ${{ vars.API_BASE_URL }}
+          RETRAINED: ${{ steps.start.outputs.retraining }}
+        run: |
+          set -euo pipefail
+          curl -sS --fail --max-time 60 "$API/model/staleness" -o after.json
+          python - <<'REPORT'
+          import json, os
+
+          after = json.load(open("after.json"))
+          before = {}
+          try:
+              before = json.load(open("staleness.json"))
+          except Exception:
+              pass
+
+          retrained = os.environ.get("RETRAINED") == "true"
+          lines = ["## Automatic retrain", ""]
+          if not retrained:
+              lines.append(
+                  f"No retrain needed. The model is trained through matchweek "
+                  f"{before.get('trained_through_matchweek')} and matchweek "
+                  f"{before.get('completed_matchweek')} is the latest completed."
+              )
+          else:
+              lines += [
+                  f"Retrained. Trained through matchweek "
+                  f"**{after.get('trained_through_matchweek')}** of "
+                  f"{after.get('season')}; latest completed is "
+                  f"{after.get('completed_matchweek')}.",
+                  "",
+                  "The operator has been emailed the resulting figures.",
+              ]
+              # A watermark that did not advance means the stamp failed, which
+              # would make this run again tomorrow and every day after.
+              if after.get("stale"):
+                  lines += ["", "The model still reports as stale after retraining, "
+                                "so the training watermark did not advance."]
+                  print("::warning::model still reports stale after a successful retrain")
+
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a", encoding="utf-8") as fh:
+                  fh.write("\n".join(lines) + "\n")
+          print("\n".join(lines))
+          REPORT

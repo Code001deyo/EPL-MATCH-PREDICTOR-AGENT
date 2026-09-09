@@ -111,3 +111,19 @@ def send(to: str, subject: str, text: str, html: str | None = None,
 def notifications_configured() -> bool:
     """Subscriber mail needs a key and a from-address; it has no fixed recipient."""
     return bool(_env("RESEND_API_KEY"))
+
+
+def send_admin(subject: str, text: str) -> bool:
+    """Mail the operator.
+
+    Goes to a FIXED address from ADMIN_EMAIL, falling back to RESET_EMAIL_TO, and
+    never to an address supplied in a request. That is the same restriction the
+    password-reset path has and for the same reason: an operator channel that a
+    caller can redirect is not an operator channel.
+    """
+    to = _env("ADMIN_EMAIL") or _env("RESET_EMAIL_TO")
+    if not to:
+        print(f"[mail] no ADMIN_EMAIL or RESET_EMAIL_TO set; operator notice "
+              f"not sent: {subject!r}")
+        return False
+    return send(to, subject, text)
