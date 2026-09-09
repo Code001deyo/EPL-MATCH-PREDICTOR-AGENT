@@ -140,6 +140,18 @@ jobs:
           # .vercel/output, which `--prebuilt` below uploads as finished work. The
           # intent the old comment claimed is now actually true: the artifact that
           # ships is the one produced in this job.
+          # Write the project link rather than relying on VERCEL_ORG_ID and
+          # VERCEL_PROJECT_ID being picked up from the environment.
+          #
+          # They were both set and exported, and the previous step proved the
+          # token can read this exact project over the REST API - and `vercel
+          # pull` still failed with "Could not retrieve Project Settings". The
+          # CLI wants the link on disk. Locally this file exists because someone
+          # ran `vercel link` once; .vercel/ is gitignored, so CI never has it.
+          mkdir -p .vercel
+          jq -nc --arg p "$VERCEL_PROJECT_ID" --arg o "$VERCEL_ORG_ID" \
+            '{projectId: $p, orgId: $o}' > .vercel/project.json
+
           npx --yes vercel@latest pull --yes --environment=production --token "$TOKEN"
           npx --yes vercel@latest build --prod --token "$TOKEN"
 
