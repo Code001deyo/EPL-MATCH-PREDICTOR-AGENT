@@ -118,6 +118,22 @@ jobs:
           echo "(${VERCEL_ORG_ID}), not a personal scope, at https://vercel.com/account/tokens"
           exit 1
 
+      - name: Check the CLI can authenticate
+        # Separate from the REST check above, because they can disagree. A
+        # project-scoped token (vcp_ prefix) authenticates against the REST API
+        # for that project and still cannot drive the CLI, which needs an account
+        # token. Both produce "Could not retrieve Project Settings" further down,
+        # so ask the question directly.
+        env:
+          TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set +e
+          echo "whoami:"
+          npx --yes vercel@latest whoami --token "$TOKEN" 2>&1 | tail -3
+          echo "teams:"
+          npx --yes vercel@latest teams ls --token "$TOKEN" 2>&1 | tail -5
+          exit 0
+
       - name: Install
         run: npm ci
 
