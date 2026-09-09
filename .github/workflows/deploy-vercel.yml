@@ -127,12 +127,12 @@ jobs:
           exit 1
 
       - name: Check the CLI can authenticate
-        # Separate from the REST check above, because the two genuinely disagree.
-        # Measured on 2026-09-09: a project-scoped token was accepted by
-        # /v9/projects/{id} with HTTP 200 and rejected by the CLI with "User not
-        # found". Without this step that surfaced three steps later as "Could not
-        # retrieve Project Settings", which reads like a linking problem and sent
-        # two fixes down the wrong path.
+        # Separate from the REST check above, because the two genuinely disagree:
+        # a stale token was accepted by /v9/projects/{id} with HTTP 200 and
+        # rejected by the CLI with "User not found". Without this step that
+        # surfaced three steps later as "Could not retrieve Project Settings",
+        # which reads like a project-linking problem and sent two attempted fixes
+        # down the wrong path.
         env:
           TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
@@ -142,17 +142,21 @@ jobs:
             exit 0
           fi
 
-          echo "::error::VERCEL_TOKEN is not an account token, so the CLI cannot use it"
+          echo "::error::the Vercel CLI rejected VERCEL_TOKEN"
           tail -3 who.txt
           echo
-          echo "Measured: the REST API accepted this token for the project, and the"
-          echo "CLI answered 'User not found' / 'token is not valid'. That is the"
-          echo "signature of a project-scoped token (vcp_ prefix): it is scoped to"
-          echo "one project's API, and the CLI needs an account-level token."
+          echo "The CLI says 'User not found' or 'token is not valid'. In every case"
+          echo "seen so far that meant the token no longer exists - revoked after it"
+          echo "was stored, or expired - rather than being the wrong kind."
           echo
-          echo "Create one at https://vercel.com/account/tokens - the 'Create Token'"
-          echo "form under Account Settings, not a token created from inside a"
-          echo "project - then: gh secret set VERCEL_TOKEN"
+          echo "Note the prefix is NOT the problem: vcp_ is Vercel's prefix for a"
+          echo "personal access token, which is exactly what the CLI wants. An"
+          echo "earlier version of this message claimed otherwise and sent two"
+          echo "attempted fixes to the wrong settings page."
+          echo
+          echo "Create a token at https://vercel.com/account/tokens with a scope"
+          echo "covering the team that owns this project, store it with"
+          echo "'gh secret set VERCEL_TOKEN', and leave it in place."
           exit 1
 
       - name: Install
