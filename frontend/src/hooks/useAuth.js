@@ -4,7 +4,7 @@ import { API } from "../config";
 
 /* Who is signed in.
  *
- * The session is an httpOnly cookie, so this deliberately CANNOT read the token —
+ * The session is an httpOnly cookie, so this deliberately CANNOT read the token -
  * that is the point of httpOnly, and it is why the token does not live in
  * localStorage where any injected script could read it. The only way to know
  * whether we are signed in is to ask the server, which is what /auth/me is for.
@@ -15,13 +15,13 @@ import { API } from "../config";
 const AuthContext = createContext(null);
 
 // withCredentials so the session cookie rides along. It is off by default in
-// axios, and without it every admin request would arrive anonymous — the failure
+// axios, and without it every admin request would arrive anonymous - the failure
 // looks exactly like "the login did not work".
 axios.defaults.withCredentials = true;
 
 export function AuthProvider({ children }) {
   // Starts signed-out and NOT loading, because the public site never asks. The
-  // session is only probed once something actually needs to know — which today is
+  // session is only probed once something actually needs to know - which today is
   // the operator route alone.
   const [state, setState] = useState({ admin: false, username: null, configured: true, loading: false });
 
@@ -41,7 +41,7 @@ export function AuthProvider({ children }) {
   // Deliberately NOT called on mount.
   //
   // Probing /auth/me on every page load would put an authentication request in
-  // the network tab of every anonymous visitor — which tells anyone looking that
+  // the network tab of every anonymous visitor - which tells anyone looking that
   // this app has an operator area, however well hidden its URL is. Only the
   // operator route calls `probe()`, so the public site emits no auth traffic at
   // all.

@@ -5,7 +5,7 @@
  * that compiles and then throws on first render, which in a client-rendered app
  * is a blank white page rather than an error anyone sees.
  *
- * Also asserts the honesty properties that are easy to lose in a later edit —
+ * Also asserts the honesty properties that are easy to lose in a later edit -
  * the reconstruction caveat, the timing caveat, and the fact that a club on 0%
  * says so rather than rendering as absent.
  */
@@ -19,7 +19,7 @@ import { clubIdentity } from "../components/crest/clubIdentity";
 
 jest.mock("axios");
 
-// Recharts measures its container, which jsdom reports as 0x0 — the chart then
+// Recharts measures its container, which jsdom reports as 0x0 - the chart then
 // renders nothing and warns. Give it a real size so the chart branch is actually
 // exercised rather than silently skipped.
 beforeAll(() => {
@@ -59,6 +59,20 @@ function mockRace({ status = "ok", teams = TEAMS, history = HISTORY } = {}) {
         last_refreshed: new Date(Date.now() - 3600_000).toISOString(),
       } });
     }
+    if (url.includes("/race/seasons")) {
+      return Promise.resolve({ data: {
+        current: "2026-27",
+        seasons: [
+          { season: "2026-27", points: 80, is_current: true },
+          { season: "2025-26", points: 760, is_current: false },
+        ],
+      } });
+    }
+    if (url.includes("/clubs")) {
+      // No badge URLs, so every crest falls through to the drawn monogram.
+      // That path has to keep working: it is what a new promotion renders as.
+      return Promise.resolve({ data: { clubs: [] } });
+    }
     if (url.includes("/subscribe/status")) {
       return Promise.resolve({ data: { confirmed: 4, delivery_configured: true } });
     }
@@ -67,23 +81,39 @@ function mockRace({ status = "ok", teams = TEAMS, history = HISTORY } = {}) {
 }
 
 describe("TitleRace", () => {
-  it("lists the clubs in contention with their probability", async () => {
+  it("renders the standings as a real table with headers", async () => {
     mockRace();
     render(<TitleRace />);
 
     expect((await screen.findAllByText("Man City")).length).toBeGreaterThan(0);
+    // A real <table> with scoped headers, not a stack of divs: a screen reader
+    // should announce "Arsenal, Points, 9" rather than reading bare numbers.
+    expect(screen.getByRole("columnheader", { name: "Pts" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Title" })).toBeInTheDocument();
     expect(screen.getByText("49.7%")).toBeInTheDocument();
     expect(screen.getByText("40.5%")).toBeInTheDocument();
+  });
+
+  it("offers the seasons that have a stored race", async () => {
+    mockRace();
+    render(<TitleRace />);
+
+    const picker = await screen.findByLabelText("Season");
+    expect(picker).toHaveValue("2026-27");
+    expect(screen.getByRole("option", { name: /2025-26/ })).toBeInTheDocument();
   });
 
   it("lists every club, including one with no chance left", async () => {
     mockRace();
     render(<TitleRace />);
 
-    // Burnley is on 0% in the fixture data. It is still in the simulation and
-    // still in the key: a club at 0.0% is a fact worth being able to read.
-    expect(await screen.findByText("Burnley")).toBeInTheDocument();
-    expect(screen.getByText("0%")).toBeInTheDocument();
+    // Burnley is on 0% in the fixture data. It stays in the table: a club at 0%
+    // is a fact worth being able to read, and dropping it would leave the reader
+    // unable to tell "no chance" from "not simulated".
+    // getAllByText: the club name appears in the row and again as the crest's
+    // accessible <title>, which is correct - the badge needs a name too.
+    expect((await screen.findAllByText("Burnley")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("0%").length).toBeGreaterThan(0);
   });
 
   it("offers the time resolutions and switches between them", async () => {
@@ -134,14 +164,25 @@ describe("TitleRace", () => {
     );
   });
 
-  it("gives every row a text equivalent, because colour alone says nothing", async () => {
+  it("names every crest, because an image with no text says nothing", async () => {
     mockRace();
     render(<TitleRace />);
+    // The badge carries the club name as its accessible name, so a screen reader
+    // reading the Club column hears which club rather than "image".
     await waitFor(() =>
-      expect(
-        screen.getByText(/Arsenal: 40\.5% chance of winning the title, 9 points from 3 played/)
-      ).toBeInTheDocument()
+      expect(screen.getByRole("img", { name: "Arsenal" })).toBeInTheDocument()
     );
+  });
+
+  it("associates each number with its column for a screen reader", async () => {
+    mockRace();
+    render(<TitleRace />);
+    // Scoped headers on a real table are what make "Arsenal, Points, 9" possible.
+    // The previous build stacked divs and needed a hidden sentence per row to say
+    // the same thing.
+    const header = await screen.findByRole("columnheader", { name: "Pts" });
+    expect(header).toHaveAttribute("scope", "col");
+    expect(screen.getByRole("columnheader", { name: "Rel" })).toHaveAttribute("scope", "col");
   });
 
   it("says nothing has been simulated rather than showing a page of zeros", async () => {
@@ -156,7 +197,7 @@ describe("SubscribeCard", () => {
     mockRace();
     render(<SubscribeCard />);
     await waitFor(() =>
-      expect(screen.getByText(/in a window before kickoff, not at an exact minute/i))
+      expect(screen.getByText(/shortly before kickoff, not at an exact minute/i))
         .toBeInTheDocument()
     );
   });

@@ -11,7 +11,7 @@ import { API } from "../../config";
  *
  * Refresh used to be a blocking POST. It downloads a season of fixtures and a
  * statistics file and then reconciles them, which on the deployed instance runs
- * past the point where the browser gives up — so the button reported "The
+ * past the point where the browser gives up - so the button reported "The
  * request failed." for a refresh that was still running, and the operator never
  * saw its result. Both now return a job id and are polled.
  */
@@ -24,7 +24,7 @@ export default function DataActions() {
   const backtest = useJob(backtestUrl);
 
   // Re-join anything already in flight rather than showing idle buttons beside
-  // a running job — started from another tab, or before a reload.
+  // a running job - started from another tab, or before a reload.
   useEffect(() => {
     let cancelled = false;
     axios.get(`${API}/data/refresh`)
@@ -47,7 +47,7 @@ export default function DataActions() {
 
   return (
     <Card>
-      <SectionTitle sub="Refreshing pulls newly played fixtures, re-attaches match statistics and settles any predictions those results resolve — as one operation, so statistics are never dropped part-way.">
+      <SectionTitle sub="Refreshing pulls newly played fixtures, re-attaches match statistics and settles any predictions those results resolve - as one operation, so statistics are never dropped part-way.">
         Data
       </SectionTitle>
 
@@ -73,7 +73,7 @@ function JobResult({ label, job, error }) {
   if (error) return <Result tone="bad">{error}</Result>;
   if (!job) return null;
   if (job.state === "running") {
-    return <Result tone="good">{`${label === "refresh" ? "Refreshing" : "Backtesting"} — ${job.stage}${progressOf(job)}.`}</Result>;
+    return <Result tone="good">{`${label === "refresh" ? "Refreshing" : "Backtesting"} - ${job.stage}${progressOf(job)}.`}</Result>;
   }
   if (job.state === "failed") {
     return <Result tone="bad">{`The ${label} failed: ${job.error || "no reason reported"}.`}</Result>;
@@ -88,14 +88,14 @@ function progressOf(job) {
 function summarise(label, result) {
   if (label === "refresh") {
     if (result?.status === "season-not-published") {
-      return "The new season is not published by the feed yet — nothing to refresh. This is the expected pre-season answer, not a failure.";
+      return "The new season is not published by the feed yet - nothing to refresh. This is the expected pre-season answer, not a failure.";
     }
     return `Refreshed ${result?.played_fixtures ?? 0} played fixtures, attached statistics to ${result?.statistics_attached ?? 0}, settled ${result?.predictions_settled ?? 0} prediction(s).`;
   }
   // Reported from the run's own summary rather than "it started": the numbers
   // are the point of running it.
   const h = result?.headline || {};
-  return `Backtest complete — ${result?.matches_scored ?? 0} matches scored, `
+  return `Backtest complete - ${result?.matches_scored ?? 0} matches scored, `
     + `${h.correct_result_pct ?? "?"}% correct results against ${h.market_correct_pct ?? "?"}% for the bookmakers' line.`;
 }
 

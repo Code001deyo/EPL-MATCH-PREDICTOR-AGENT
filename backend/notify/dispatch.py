@@ -51,7 +51,7 @@ def _send_to_all(db, fixture, kind, build_message) -> dict:
             continue
 
         # Claim the send before making it. If a concurrent run claimed it first
-        # this returns False and we do not send — that is the duplicate being
+        # this returns False and we do not send - that is the duplicate being
         # prevented at the database rather than by a check that can race.
         if not record_sent(db, fixture.pl_fixture_id, subscriber.id, kind):
             skipped += 1
@@ -103,7 +103,7 @@ def dispatch(db, now: datetime | None = None) -> dict:
             record = stored_prediction(db, fixture.season, fixture.home_team, fixture.away_team)
             if record is None:
                 # Nobody clicked Predict on this match. Make the prediction now,
-                # rather than mailing about a fixture with nothing to say — and
+                # rather than mailing about a fixture with nothing to say - and
                 # store it, so the site and the email agree and the call can be
                 # scored afterwards.
                 result = predict_now(db, fixture.home_team, fixture.away_team,

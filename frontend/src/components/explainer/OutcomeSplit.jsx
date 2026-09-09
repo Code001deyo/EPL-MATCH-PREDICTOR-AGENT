@@ -8,7 +8,7 @@ import { OUTCOME_SPLIT } from "./explainerData";
 /* What the model calls, against what actually happened, over one full season.
  *
  * The empty draw column is the entire point of the chart, and an empty column is
- * exactly the thing a bar chart renders as *nothing* — indistinguishable from a
+ * exactly the thing a bar chart renders as *nothing* - indistinguishable from a
  * category that was never in the data. So the zero is labelled explicitly, in the
  * semantic red, with the count of matches it cost underneath. A reader must be
  * able to tell "predicted 0% of the time" apart from "not measured".

@@ -5,7 +5,7 @@
  * stores. Recharts wants one row per x-value with a column per club.
  *
  * **Why resampling is honest here.** A title probability is a step function. It
- * does not drift with the clock — it changes when matches are played and holds
+ * does not drift with the clock - it changes when matches are played and holds
  * still in between, which is why every snapshot is stamped with `as_of`: the
  * moment its matchweek's last match finished. Bucketing those into hours, days,
  * weeks or months is therefore a genuine resampling of a real time series, not
@@ -75,7 +75,7 @@ export function buildSeries(points, teams, granularity = "matchweek") {
   const rows = new Map();
 
   // Sorted so that when two snapshots land in the same bucket the later one
-  // wins — a bucket should hold the state at its end, not at its start.
+  // wins - a bucket should hold the state at its end, not at its start.
   const ordered = [...points]
     .filter((p) => wanted.has(p.team))
     .sort((a, b) => {

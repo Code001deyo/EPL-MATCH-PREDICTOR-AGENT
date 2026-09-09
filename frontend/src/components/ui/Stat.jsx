@@ -2,7 +2,7 @@ import { C, semantic, type } from "../../theme";
 
 // A judged number: a value plus, optionally, a delta against a baseline.
 // The delta's colour and its bar length both come from magnitude, not from
-// whether the number is merely positive — a +1.3pt edge renders as visibly
+// whether the number is merely positive - a +1.3pt edge renders as visibly
 // marginal, not as a green tick. Deltas near zero are always "neutral"
 // regardless of sign, because a 0.3pt edge is not a win, it is noise.
 //
@@ -27,7 +27,7 @@ export default function Stat({ label, value, unit = "", detail, delta, size = "m
 
 // magnitude: how big the edge is, in the metric's own units (points, log-loss
 // units, etc). marginalAt: the magnitude below which this reads as noise, not
-// a result — the bar and colour both collapse to neutral under that line.
+// a result - the bar and colour both collapse to neutral under that line.
 function DeltaBar({ label, magnitude, marginalAt = 2, scaleMax = 10, positiveIsGood = true }) {
   const abs = Math.abs(magnitude);
   const isMarginal = abs < marginalAt;

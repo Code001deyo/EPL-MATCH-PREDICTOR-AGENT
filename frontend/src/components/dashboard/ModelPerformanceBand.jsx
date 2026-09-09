@@ -9,7 +9,7 @@ import { API } from "../../config";
 
 // The primary content of the dashboard: "is the model working?". Reads
 // /model/metrics (saved_models/metrics.json). A model at 44.7% against a
-// 43.4% baseline must read as marginal — the delta bars in <Stat> collapse
+// 43.4% baseline must read as marginal - the delta bars in <Stat> collapse
 // to neutral grey under a small threshold, on purpose, regardless of sign.
 export default function ModelPerformanceBand() {
   const [metrics, setMetrics] = useState(null);
@@ -38,7 +38,7 @@ export default function ModelPerformanceBand() {
         // Taken from the artefact. Hardcoding the holdout season meant the label
         // kept naming 2025-26 after the model had moved on to a newer holdout.
         holdoutSeason
-          ? `Scored on the ${holdoutSeason} holdout — the most recent season the model did not train on.`
+          ? `Scored on the ${holdoutSeason} holdout - the most recent season the model did not train on.`
           : "Scored on the most recent season the model did not train on."
       }>
         Model Performance
@@ -111,7 +111,7 @@ function Verdict({ deltaPts, beatsBaseline }) {
   const tone = marginal ? semantic.neutral : beatsBaseline ? semantic.good : semantic.bad;
   const bg = marginal ? semantic.neutralBg : beatsBaseline ? semantic.goodBg : semantic.badBg;
   const text = marginal
-    ? `Beats its baseline by ${deltaPts > 0 ? "+" : ""}${deltaPts.toFixed(1)} points — real but marginal. This clears the bar of "predicts nothing" and little else.`
+    ? `Beats its baseline by ${deltaPts > 0 ? "+" : ""}${deltaPts.toFixed(1)} points - real but marginal. This clears the bar of "predicts nothing" and little else.`
     : beatsBaseline
     ? `Beats its baseline by ${deltaPts.toFixed(1)} points.`
     : `Trails its baseline by ${Math.abs(deltaPts).toFixed(1)} points.`;

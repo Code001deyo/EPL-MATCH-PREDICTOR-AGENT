@@ -70,11 +70,11 @@ export default function Analytics() {
 
       {/* League KPIs */}
       <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
-        <KpiCard label="Avg Goals / Game" value={league?.avg_goals_per_game ?? "—"} color={C.blue} />
-        <KpiCard label="Home Win Rate" value={league ? `${(league.home_win_rate * 100).toFixed(0)}%` : "—"} color={C.emerald} />
-        <KpiCard label="Draw Rate" value={league ? `${(league.draw_rate * 100).toFixed(0)}%` : "—"} color={C.amber} />
-        <KpiCard label="Away Win Rate" value={league ? `${(league.away_win_rate * 100).toFixed(0)}%` : "—"} color={C.rose} />
-        <KpiCard label="Matches Played" value={league?.total_matches ?? "—"} color={C.slate600} />
+        <KpiCard label="Avg Goals / Game" value={league?.avg_goals_per_game ?? "-"} color={C.blue} />
+        <KpiCard label="Home Win Rate" value={league ? `${(league.home_win_rate * 100).toFixed(0)}%` : "-"} color={C.emerald} />
+        <KpiCard label="Draw Rate" value={league ? `${(league.draw_rate * 100).toFixed(0)}%` : "-"} color={C.amber} />
+        <KpiCard label="Away Win Rate" value={league ? `${(league.away_win_rate * 100).toFixed(0)}%` : "-"} color={C.rose} />
+        <KpiCard label="Matches Played" value={league?.total_matches ?? "-"} color={C.slate600} />
       </div>
 
       {/* Charts */}
@@ -88,7 +88,7 @@ export default function Analytics() {
               <YAxis {...axis} />
               <Tooltip {...tooltipStyle} labelFormatter={(l) => `Matchweek ${l}`} />
               <Legend wrapperStyle={legendStyle} />
-              {/* Was green vs red — red reads as "bad away goals" rather than
+              {/* Was green vs red - red reads as "bad away goals" rather than
                   "away goals". Brand pair, no meaning implied. */}
               <Line type="monotone" dataKey="home_goals" name="Home Goals" stroke={series.primary} strokeWidth={2} dot={false} />
               <Line type="monotone" dataKey="away_goals" name="Away Goals" stroke={series.accent} strokeWidth={2} dot={false} />
@@ -170,7 +170,7 @@ export default function Analytics() {
 
       {/* Form Table */}
       <Card>
-        <SectionTitle>League Table — {season}</SectionTitle>
+        <SectionTitle>League Table - {season}</SectionTitle>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>

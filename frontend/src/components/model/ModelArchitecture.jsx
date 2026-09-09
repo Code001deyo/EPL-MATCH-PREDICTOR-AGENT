@@ -12,7 +12,7 @@ import { API } from "../../config";
  * This block used to be a hardcoded list claiming "35 engineered features",
  * "Home Goals + Away Goals" and an "80/20 walk-forward split". By the time it
  * was read the model had 55 features, twelve target models and a season-holdout
- * split — so the page described a model that no longer existed. Anything here
+ * split - so the page described a model that no longer existed. Anything here
  * that can drift is now taken from /model/metrics. */
 export default function ModelArchitecture() {
   const [metrics, setMetrics] = useState(null);
@@ -59,12 +59,12 @@ export default function ModelArchitecture() {
     ["Estimator", `${est.backend || "unknown"} ${est.version || ""}`.trim()],
     ["Objective", "count:poisson"],
     ["Target models", `${statModels + 2} (goals + ${statModels} match statistics)`],
-    ["Features", `${val.features ?? "—"} engineered features`],
-    ["Validation", `${val.split || "—"} · ${val.train_rows ?? "—"} train / ${val.val_rows ?? "—"} holdout`],
-    ["Holdout season", acc.holdout_season || "—"],
+    ["Features", `${val.features ?? "-"} engineered features`],
+    ["Validation", `${val.split || "-"} · ${val.train_rows ?? "-"} train / ${val.val_rows ?? "-"} holdout`],
+    ["Holdout season", acc.holdout_season || "-"],
     ["Missing values", "passed through as NaN, never imputed"],
     ["Probabilities", "Poisson over the two predicted rates"],
-    ["Trained at", metrics.trained_at ? new Date(metrics.trained_at).toLocaleString() : "—"],
+    ["Trained at", metrics.trained_at ? new Date(metrics.trained_at).toLocaleString() : "-"],
   ];
 
   // Baselines the model failed to beat. Shown deliberately: metrics.json used
@@ -100,7 +100,7 @@ export default function ModelArchitecture() {
           <div style={{ ...type.body, color: C.slate600 }}>{lost.join("; ")}.</div>
           <div style={{ ...type.micro, fontWeight: 400, color: C.slate400, marginTop: 6 }}>
             MAE is minimised by the median, and Premier League away goals have a median of 1, so this is
-            expected — but it is reported rather than left out.
+            expected - but it is reported rather than left out.
           </div>
         </div>
       )}

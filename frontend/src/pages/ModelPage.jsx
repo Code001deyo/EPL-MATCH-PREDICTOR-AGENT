@@ -27,7 +27,7 @@ export default function ModelPage() {
   useEffect(() => { fetchPerf(); }, [fetchPerf]);
 
   // These counts live under `live_settled`. This page used to read them from the
-  // top level, where only `evaluated` and `total_predictions` exist — so exact,
+  // top level, where only `evaluated` and `total_predictions` exist - so exact,
   // correct and wrong were all undefined and defaulted to 0, and the donut
   // rendered three empty slices beside a non-zero "Evaluated" count.
   const live = perf?.live_settled || {};
@@ -87,8 +87,8 @@ export default function ModelPage() {
       </SectionTitle>
 
       <div style={{ display: "flex", gap: space.lg, marginBottom: space.xl, flexWrap: "wrap" }}>
-        <KpiCard label="Total Predictions" value={live.total_predictions ?? "—"} color={C.blue} />
-        <KpiCard label="Evaluated" value={evaluated || "—"} sub="with actual results" color={C.slate600} />
+        <KpiCard label="Total Predictions" value={live.total_predictions ?? "-"} color={C.blue} />
+        <KpiCard label="Evaluated" value={evaluated || "-"} sub="with actual results" color={C.slate600} />
         <KpiCard label="Result Accuracy" value={evaluated ? `${(live.correct_result_accuracy * 100).toFixed(0)}%` : "not measured"} color={C.emerald} />
         <KpiCard label="Exact Score %" value={evaluated ? `${(live.exact_score_accuracy * 100).toFixed(0)}%` : "not measured"} color={C.amber} />
         <KpiCard label="Avg Confidence" value={live.avg_confidence ? `${(live.avg_confidence * 100).toFixed(0)}%` : "not measured"} color={C.blue} />

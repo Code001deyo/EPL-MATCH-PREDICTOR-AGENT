@@ -1,7 +1,7 @@
 import { C, radius } from "../theme";
 
 // Says what a prediction is actually based on. A newly promoted club has no
-// Premier League record, so its forecast rests on adjusted Championship form —
+// Premier League record, so its forecast rests on adjusted Championship form -
 // that should be visible on the prediction itself, not buried in the API.
 export default function EvidenceNote({ prediction }) {
   if (!prediction) return null;
@@ -41,9 +41,9 @@ export default function EvidenceNote({ prediction }) {
 function clubNote(club, matches) {
   const played = matches || 0;
   if (played === 0) {
-    return `${club} is newly promoted with no Premier League matches this season — this forecast uses their Championship form, adjusted for the step up.`;
+    return `${club} is newly promoted with no Premier League matches this season - this forecast uses their Championship form, adjusted for the step up.`;
   }
-  return `${club} is newly promoted — based on ${played} Premier League ${
+  return `${club} is newly promoted - based on ${played} Premier League ${
     played === 1 ? "match" : "matches"
   } plus adjusted Championship form.`;
 }

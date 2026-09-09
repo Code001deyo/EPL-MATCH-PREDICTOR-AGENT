@@ -1,11 +1,10 @@
 import { C, semantic, radius, shadow, type } from "../../theme";
-import InfoTip from "./InfoTip";
 
 /* One card for "a number with a label", used everywhere.
  *
  * There were three visual languages for this: KpiCard on Analytics and ModelPage,
  * Card + Stat on the Dashboard, and bare divs in the head-to-head block. Same idea,
- * three paddings, three type scales, three colour rules — the three pages read as
+ * three paddings, three type scales, three colour rules - the three pages read as
  * three products.
  *
  * Compact by design: the dashboard's KPI strip has to fit six of these in one row
@@ -13,7 +12,7 @@ import InfoTip from "./InfoTip";
  * is tighter. `size="lg"` restores the larger treatment where a page has room.
  *
  * `delta` is the piece that keeps the dashboard honest after the prose moved into
- * tooltips: it carries the comparison — "+2.6 vs baseline" — inline, so a reader
+ * tooltips: it carries the comparison - "+2.6 vs baseline" - inline, so a reader
  * who never hovers still sees that 46% is measured against something. */
 export default function MetricCard({
   label, value, sub, delta, info, size = "md", accent = C.navy, muted = false,
@@ -37,7 +36,6 @@ export default function MetricCard({
         }}>
           {label}
         </span>
-        {info && <InfoTip label={`About ${label}`}>{info}</InfoTip>}
       </div>
 
       <div style={{
@@ -57,7 +55,7 @@ export default function MetricCard({
   );
 }
 
-/* A signed comparison, coloured by whether it is good — not by which series it
+/* A signed comparison, coloured by whether it is good - not by which series it
  * belongs to. `marginalAt` exists because a model beating its baseline by 2.6
  * points should not be dressed in the same confident green as one beating it by
  * 12: below the threshold the chip goes neutral grey regardless of sign. */

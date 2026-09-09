@@ -7,13 +7,13 @@ import { API } from "../../config";
 
 /* The one-row summary the dashboard opens with.
  *
- * This replaces ModelPerformanceBand, which occupied ~290px on its own — a card
- * title, a subtitle, three large stats with delta bars and a verdict paragraph —
+ * This replaces ModelPerformanceBand, which occupied ~290px on its own - a card
+ * title, a subtitle, three large stats with delta bars and a verdict paragraph -
  * so nothing else fitted above the fold. Same numbers, one row, with the verdict
  * sentence moved into the ⓘ on the metric it describes.
  *
  * Six cards: three about the model, three about the selected season. That split is
- * deliberate — the top of a dashboard should answer "is it working" and "what am I
+ * deliberate - the top of a dashboard should answer "is it working" and "what am I
  * looking at" before anything else. */
 export default function SummaryStrip({ season, league, leagueLoading, upcomingCount, division }) {
   const [metrics, setMetrics] = useState(null);
@@ -42,13 +42,13 @@ export default function SummaryStrip({ season, league, leagueLoading, upcomingCo
   // The model is trained and scored on Premier League fixtures only. With the
   // Championship selected, the three model cards would otherwise sit under a
   // "Championship" header describing a model that has never seen a Championship
-  // match — so they say which competition they belong to.
+  // match - so they say which competition they belong to.
   const modelScope = division && division !== "E0" ? "Premier League model" : "vs always-home";
 
   const played = league?.total_matches;
   const smallSample = Number.isFinite(played) && played > 0 && played < 120;
   const sampleNote = smallSample
-    ? ` Only ${played} matches have been played so far, so this figure is volatile — it will move substantially as the season fills in.`
+    ? ` Only ${played} matches have been played so far, so this figure is volatile - it will move substantially as the season fills in.`
     : "";
   // "Loading" and "no backtest exists" are different states and must not render
   // the same. The card read "no backtest" for the second or two the request was in
@@ -65,27 +65,27 @@ export default function SummaryStrip({ season, league, leagueLoading, upcomingCo
     }}>
       <MetricCard
         label="Correct result"
-        value={trained ? `${acc.correct_result_pct.toFixed(1)}%` : state === "loading" ? "…" : "—"}
+        value={trained ? `${acc.correct_result_pct.toFixed(1)}%` : state === "loading" ? "…" : "-"}
         delta={trained ? { value: resultDelta, marginalAt: 3 } : undefined}
         sub={trained ? modelScope : state === "loading" ? "loading" : "not measured"}
         info={
           trained
-            ? `The model is trained and scored on Premier League fixtures only, whichever division is selected above. Scored on the ${acc.holdout_season} holdout — the most recent season the model did not train on — over ${acc.matches_scored} matches. The always-home baseline calls ${acc.always_home_pct.toFixed(1)}% correct on the same fixtures, so the model's real edge is ${resultDelta > 0 ? "+" : ""}${resultDelta.toFixed(1)} points. Below about 3 points that is real but marginal: it clears the bar of "predicts nothing" and little else.`
+            ? `The model is trained and scored on Premier League fixtures only, whichever division is selected above. Scored on the ${acc.holdout_season} holdout - the most recent season the model did not train on - over ${acc.matches_scored} matches. The always-home baseline calls ${acc.always_home_pct.toFixed(1)}% correct on the same fixtures, so the model's real edge is ${resultDelta > 0 ? "+" : ""}${resultDelta.toFixed(1)} points. Below about 3 points that is real but marginal: it clears the bar of "predicts nothing" and little else.`
             : "No trained model with a scored holdout season yet. Retrain from the Model page."
         }
       />
 
       <MetricCard
         label="Log loss"
-        value={trained ? acc.log_loss.toFixed(3) : state === "loading" ? "…" : "—"}
+        value={trained ? acc.log_loss.toFixed(3) : state === "loading" ? "…" : "-"}
         delta={trained ? { value: logLossDelta, suffix: "pts", marginalAt: 2 } : undefined}
         sub={trained ? "lower is better" : state === "loading" ? "loading" : "not measured"}
-        info="Measures the probabilities, not just the pick — a confident wrong call is punished harder than an unsure one. Compared against the base-rate baseline, which always predicts the league's average home/draw/away split."
+        info="Measures the probabilities, not just the pick - a confident wrong call is punished harder than an unsure one. Compared against the base-rate baseline, which always predicts the league's average home/draw/away split."
       />
 
       <MetricCard
         label="Backtested"
-        value={bt ? `${bt.correct_result_pct}%` : btLoading ? "…" : "—"}
+        value={bt ? `${bt.correct_result_pct}%` : btLoading ? "…" : "-"}
         delta={bt ? { value: round1(bt.correct_result_pct - bt.always_home_pct), marginalAt: 3 } : undefined}
         sub={bt ? `${bt.matches} matches` : btLoading ? "loading" : "no backtest yet"}
         info="A walk-forward simulation: the model is refit before each matchweek and then scored on it. Reported separately from the holdout figure because the two measure different things and averaging them would hide which is which. This figure spans the seasons the backtest was run over and does not change with the season selector."
@@ -93,7 +93,7 @@ export default function SummaryStrip({ season, league, leagueLoading, upcomingCo
 
       <MetricCard
         label="Goals / game"
-        value={leagueLoading ? "…" : league?.avg_goals_per_game ?? "—"}
+        value={leagueLoading ? "…" : league?.avg_goals_per_game ?? "-"}
         sub={league ? `${played} played${smallSample ? " · small sample" : ""}` : season || ""}
         accent={C.navyLight}
         info={`Average total goals per match across the selected season and division.${sampleNote}`}
@@ -101,7 +101,7 @@ export default function SummaryStrip({ season, league, leagueLoading, upcomingCo
 
       <MetricCard
         label="Home win rate"
-        value={leagueLoading ? "…" : league ? `${(league.home_win_rate * 100).toFixed(0)}%` : "—"}
+        value={leagueLoading ? "…" : league ? `${(league.home_win_rate * 100).toFixed(0)}%` : "-"}
         sub={league ? `${played} played${smallSample ? " · small sample" : ""}` : ""}
         accent={C.navyLight}
         info={`Share of matches won by the home side in the selected season and division. This is what the always-home baseline exploits.${sampleNote}`}
@@ -109,7 +109,7 @@ export default function SummaryStrip({ season, league, leagueLoading, upcomingCo
 
       <MetricCard
         label="Upcoming"
-        value={Number.isFinite(upcomingCount) ? upcomingCount : "—"}
+        value={Number.isFinite(upcomingCount) ? upcomingCount : "-"}
         sub="fixtures scheduled"
         accent={C.navyLight}
         info="Unplayed fixtures the model can be asked to predict, from the live Premier League feed."

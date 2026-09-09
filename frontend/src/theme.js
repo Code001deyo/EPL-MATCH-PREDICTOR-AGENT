@@ -2,16 +2,16 @@
 // Primary: PL Purple #37003c, Secondary: PL Green #00ff85, Accent: White #ffffff
 //
 // IMPORTANT: brand colour and semantic colour are separate token sets.
-// C.blue (the PL green) is a BRAND accent — used for chart bars, active nav
-// state, buttons. `semantic` below is a MEANING accent — used only to say
+// C.blue (the PL green) is a BRAND accent - used for chart bars, active nav
+// state, buttons. `semantic` below is a MEANING accent - used only to say
 // "this number is good / marginal / bad". They must never share a hex, or a
 // chart bar and a positive delta become visually the same signal.
 export const C = {
   // EPL brand
   navy: "#37003c",        // PL primary purple (sidebar/header)
   navyLight: "#4d0052",   // lighter purple for hover/active states
-  blue: "#00ff85",        // PL signature green (primary accent) — BRAND, not semantic
-  blueDark: "#00b368",    // darker green for hover — distinct from semantic.good
+  blue: "#00ff85",        // PL signature green (primary accent) - BRAND, not semantic
+  blueDark: "#00b368",    // darker green for hover - distinct from semantic.good
   // Legacy semantic-ish colours, still used by W/D/L badges elsewhere in the app.
   emerald: "#00cc6a",     // win / positive
   amber: "#f59e0b",       // draw / warning
@@ -30,7 +30,7 @@ export const C = {
 };
 
 // Semantic tokens: judge a number, never decorate a chart with these.
-// Deliberately muted relative to the vivid brand green — a model that beats
+// Deliberately muted relative to the vivid brand green - a model that beats
 // its baseline by 1.3 points should not flash the same colour as the sidebar.
 export const semantic = {
   good: "#2f8f5b",

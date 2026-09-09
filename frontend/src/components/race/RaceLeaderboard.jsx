@@ -1,77 +1,98 @@
+import Crest from "../crest/Crest";
 import { clubIdentity } from "../crest/clubIdentity";
 import { C } from "../../theme";
 
-/* The chart's key: every club, its line colour, and its current probability.
+/* The standings, in the shape a football table is actually read.
  *
- * This started as twenty rows each carrying a progress bar and a monogram badge.
- * Both had to go. Fifteen of the bars sat at 0% and rendered as empty track, so
- * the bulk of the page was clubs with no chance; and the badge was a 26px
- * monogram that read as a favicon rather than a crest, decorating a row that
- * already said the club's name.
+ * Position, badge, club, then numbers right-aligned and tabular so the digits
+ * line up down the column. That last detail is what makes a table scannable and
+ * it is the one most web tables get wrong.
  *
- * What replaces them does the job the bar was failing at — tying a name to a line
- * on the chart above — using the one thing that can: the line's own colour. All
- * twenty clubs are listed, because every one of them is in the simulation and a
- * club at 0.0% is a fact worth being able to read.
+ * This replaced a list of twenty progress bars. Most of them sat at 0% and
+ * rendered as empty track, so the loudest thing on the page was the clubs with
+ * no chance. A real table carries more information in less space.
+ *
+ * The colour chip beside each badge is that club's line on the chart above, so a
+ * row can be tied to a line without a lookup. The badge says which club; the chip
+ * says which line. Neither does both.
  */
-export default function RaceLeaderboard({ teams }) {
+export default function RaceLeaderboard({ teams, showChange = true }) {
   if (!teams.length) return null;
 
   return (
-    <div style={{ marginTop: 20 }}>
-      <div className="pl-race-key" role="list">
-        {teams.map((team, i) => (
-          <KeyRow key={team.team} team={team} rank={i + 1} />
-        ))}
-      </div>
+    <div className="pl-scroll-x" style={{ marginTop: 20 }}>
+      <table className="pl-table">
+        <thead>
+          <tr>
+            <th className="pl-num" scope="col">Pos</th>
+            <th scope="col">Club</th>
+            <th className="pl-num" scope="col">Pl</th>
+            <th className="pl-num" scope="col">Pts</th>
+            <th className="pl-num" scope="col">GD</th>
+            <th className="pl-num" scope="col">Title</th>
+            <th className="pl-num" scope="col">Top 4</th>
+            <th className="pl-num" scope="col">Rel</th>
+            {showChange && <th className="pl-num" scope="col">Chg</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {teams.map((team, i) => (
+            <Row key={team.team} team={team} rank={i + 1} showChange={showChange} />
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-function KeyRow({ team, rank }) {
+function Row({ team, rank, showChange }) {
   const club = clubIdentity(team.team);
-  const percent = (team.title_prob || 0) * 100;
   const delta = team.title_delta;
 
   return (
-    <div className="pl-race-key-row" role="listitem">
-      <span className="pl-race-rank">{rank}</span>
+    <tr>
+      <td className="pl-num pl-pos" data-label="Pos">{rank}</td>
 
-      {/* Same colour and stroke weight as this club's line on the chart, so the
-          eye can move between key and plot without a lookup. */}
-      <span
-        aria-hidden="true"
-        className="pl-race-swatch"
-        style={{ background: club.primary }}
-      />
+      <td data-label="Club">
+        <span className="pl-club">
+          <i className="pl-club-chip" style={{ background: club.primary }} aria-hidden="true" />
+          <Crest team={team.team} size={22} />
+          <span className="pl-club-name">{club.name || team.team}</span>
+        </span>
+      </td>
 
-      <span className="pl-race-club">{club.name || team.team}</span>
+      <td className="pl-num" data-label="Played">{team.played}</td>
+      <td className="pl-num pl-strong" data-label="Points">{team.points}</td>
+      <td className="pl-num" data-label="Goal difference">
+        {team.goal_difference > 0 ? `+${team.goal_difference}` : team.goal_difference}
+      </td>
 
-      <span className="pl-race-pct">
-        {percent >= 0.05 ? `${percent.toFixed(1)}%` : "0%"}
-      </span>
+      <td className="pl-num pl-strong" data-label="Title">{pct(team.title_prob)}</td>
+      <td className="pl-num" data-label="Top 4">{pct(team.top_four_prob)}</td>
+      <td className="pl-num" data-label="Relegation">{pct(team.relegation_prob)}</td>
 
-      <span className="pl-race-move" style={{ color: deltaColour(delta) }}>
-        {delta == null ? "" : formatDelta(delta)}
-      </span>
-
-      {/* Colour and an arrow are the only visual carriers here, and several clubs
-          share a palette — so each row states itself in words for a screen reader. */}
-      <span className="pl-sr-only">{describe(team, percent, delta)}</span>
-    </div>
+      {showChange && (
+        <td className="pl-num" data-label="Change" style={{ color: deltaColour(delta) }}>
+          {delta == null ? "" : formatDelta(delta)}
+        </td>
+      )}
+    </tr>
   );
 }
 
-function describe(team, percent, delta) {
-  const base = `${team.team}: ${percent.toFixed(1)}% chance of winning the title, ${team.points} points from ${team.played} played`;
-  if (delta == null) return base;
-  const change = (delta * 100).toFixed(1);
-  return `${base}, ${delta >= 0 ? "up" : "down"} ${Math.abs(change)} percentage points since the previous matchweek`;
+/* Whole tenths. The simulation does not distinguish 52.31% from 52.36% in a way
+ * anyone should act on, and a second decimal would imply it does. */
+function pct(value) {
+  if (value == null) return "-";
+  const p = value * 100;
+  if (p >= 99.95) return "100%";
+  if (p < 0.05) return "0%";
+  return `${p.toFixed(1)}%`;
 }
 
 function formatDelta(delta) {
   const points = delta * 100;
-  if (Math.abs(points) < 0.05) return "";
+  if (Math.abs(points) < 0.05) return "-";
   return `${points > 0 ? "▲" : "▼"}${Math.abs(points).toFixed(1)}`;
 }
 

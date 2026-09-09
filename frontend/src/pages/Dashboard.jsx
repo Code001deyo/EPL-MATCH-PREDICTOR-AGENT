@@ -19,7 +19,7 @@ import SubscribeCard from "../components/SubscribeCard";
  *
  * The previous build inverted that: the first viewport held a header, one tall
  * performance band and the top 40px of a chart, so nothing that could be compared
- * was ever on screen together. Everything below is arranged around one rule —
+ * was ever on screen together. Everything below is arranged around one rule -
  * THE SUMMARY FITS ONE SCREEN, the detail lives below the fold.
  *
  * Above the fold, at 1366x768:

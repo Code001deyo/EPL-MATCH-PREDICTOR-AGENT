@@ -20,7 +20,7 @@ import TitleRace from "./pages/TitleRace";
  *
  * Being straight about the limit: this reduces what is *visible*, it does not make
  * the path secret. The route string is still in the main bundle, because a
- * client-rendered app has to know its own routes — anyone reading the minified JS
+ * client-rendered app has to know its own routes - anyone reading the minified JS
  * can find it. That is fine, and it is why the path was never the protection:
  * `require_admin` on the server is, and it holds for a caller who knows the URL
  * exactly as well as for one who does not. */
@@ -36,7 +36,7 @@ export default function App() {
   );
 }
 
-/* Split from App because the responsive hook has to live inside the Router —
+/* Split from App because the responsive hook has to live inside the Router -
  * Sidebar uses useLocation to close its drawer on navigation. */
 function Shell() {
   const narrow = useIsNarrow();
@@ -62,8 +62,8 @@ function Shell() {
             <Route path="/explainer" element={<Explainer />} />
 
             {/* Operator route. Unlinked from anywhere in the app and reachable
-                only by typing it. The path is not the protection — every endpoint
-                behind it is enforced server-side — it just keeps the operator
+                only by typing it. The path is not the protection - every endpoint
+                behind it is enforced server-side - it just keeps the operator
                 area unadvertised to people browsing the public site. */}
             <Route path="/secure-model" element={
               <Suspense fallback={null}><SecureModel /></Suspense>

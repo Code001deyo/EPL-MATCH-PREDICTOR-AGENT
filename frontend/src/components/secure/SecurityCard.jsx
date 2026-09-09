@@ -13,7 +13,7 @@ const MIN_PASSWORD = 12;
  * Both forms ask for the current password even though the caller is already
  * signed in. That is not friction for its own sake: a session alone must not be
  * enough to change the credential, or anyone holding a borrowed cookie could lock
- * the real operator out of their own account. The server enforces it too — this
+ * the real operator out of their own account. The server enforces it too - this
  * form is a convenience, not the control. */
 export default function SecurityCard() {
   const { refresh } = useAuth();

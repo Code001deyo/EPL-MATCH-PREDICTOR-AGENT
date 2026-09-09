@@ -71,6 +71,30 @@ def current(season: str = None, db: Session = Depends(get_db)):
     }
 
 
+@router.get("/seasons")
+def seasons(db: Session = Depends(get_db)):
+    """Seasons that have a stored race, newest first.
+
+    Only seasons with snapshots are listed. Offering a season the simulation has
+    never run for would give the reader an empty chart and no way to tell whether
+    that meant "no race" or "not computed".
+    """
+    from sqlalchemy import func
+    from db.race import TitleOddsSnapshot
+
+    rows = (
+        db.query(TitleOddsSnapshot.season, func.count(TitleOddsSnapshot.id))
+        .group_by(TitleOddsSnapshot.season)
+        .order_by(TitleOddsSnapshot.season.desc())
+        .all()
+    )
+    current = _current_season_label()
+    return {
+        "current": current,
+        "seasons": [{"season": s, "points": n, "is_current": s == current} for s, n in rows],
+    }
+
+
 @router.get("/history")
 def history(season: str = None, team: str = Query(None),
             db: Session = Depends(get_db)):

@@ -9,7 +9,7 @@ The same reasoning already governs the password-reset endpoint.
 
 `POST /notifications/dispatch` is admin-only, behind the same `require_admin`
 that guards refresh. It is what actually sends mail, so leaving it open would let
-anyone empty a rate-limited sending quota — and, on a five-minute cron, do it
+anyone empty a rate-limited sending quota - and, on a five-minute cron, do it
 repeatedly.
 """
 
@@ -64,7 +64,7 @@ def _page(title: str, message: str, ok: bool = True) -> HTMLResponse:
     return HTMLResponse(f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{title} — EPL Predictor</title></head>
+<title>{title} - EPL Predictor</title></head>
 <body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
              background:#37003c;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#fff">
   <main style="max-width:32rem;padding:2.5rem;text-align:center">
@@ -97,7 +97,7 @@ def subscribe(payload: dict, request: Request, db: Session = Depends(get_db)):
         confirm_url = f"{base}/api/subscribe/confirm?token={row.confirm_token}"
         subject, body = templates.confirm_subscription(confirm_url)
         # If this fails, mailer logs loudly. The caller still gets the generic
-        # reply — telling them the send failed would reveal the address exists.
+        # reply - telling them the send failed would reveal the address exists.
         send(email, subject, body)
 
     return GENERIC
@@ -140,7 +140,7 @@ def unsubscribe(token: str = "", db: Session = Depends(get_db)):
 
 @router.get("/subscribe/status")
 def subscriber_status(db: Session = Depends(get_db)):
-    """Counts only — never addresses.
+    """Counts only - never addresses.
 
     Public so the site can say how many people follow the predictions. Returning
     the list would publish everyone's email.

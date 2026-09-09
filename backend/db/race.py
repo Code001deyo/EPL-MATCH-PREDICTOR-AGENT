@@ -166,6 +166,9 @@ def series(db, season: str, teams: list[str] | None = None,
             "relegation_prob": r.relegation_prob,
             "points": r.points,
             "played": r.played,
+            # Stored since the first version and never returned, so the standings
+            # table rendered an empty GD column for every club.
+            "goal_difference": r.goal_difference,
             "projected_points": r.projected_points,
             "kind": r.kind,
             # Falls back to created_at for rows written before as_of existed, so

@@ -3,7 +3,6 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import Card from "../ui/Card";
 import SectionTitle from "../ui/SectionTitle";
 import EmptyState from "../ui/EmptyState";
-import InfoTip from "../ui/InfoTip";
 import { C, type, space } from "../../theme";
 import { series, axis, grid, tooltipStyle, legendStyle, pct, deltaColor } from "../charts/chartTheme";
 import useBacktest from "../../hooks/useBacktest";
@@ -27,11 +26,6 @@ export default function SeasonComparison() {
     <Card>
       <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
         <span style={{ ...type.section, color: C.slate800 }}>Season by season</span>
-        <InfoTip label="About the season comparison">
-          Each backtested season scored on its own, against the always-home baseline for the
-          same fixtures. The headline backtest figure is an average over these seasons, and
-          they are not alike — the edge has narrowed each year.
-        </InfoTip>
       </div>
 
       {state === "loading" && <EmptyState kind="loading" />}
@@ -64,7 +58,7 @@ export default function SeasonComparison() {
           </ResponsiveContainer>
 
           {/* The gap per season, stated rather than left to be eyeballed off the
-              bars — including any season where it is negative. */}
+              bars - including any season where it is negative. */}
           <div style={{ display: "flex", gap: space.lg, flexWrap: "wrap", marginTop: space.md }}>
             {rows.map((s) => (
               <div key={s.season} style={{ ...type.micro, color: C.slate500 }}>

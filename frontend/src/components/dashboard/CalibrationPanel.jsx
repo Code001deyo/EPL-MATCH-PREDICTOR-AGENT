@@ -4,7 +4,6 @@ import { ComposedChart, Line, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, Res
 import Card from "../ui/Card";
 import SectionTitle from "../ui/SectionTitle";
 import EmptyState from "../ui/EmptyState";
-import InfoTip from "../ui/InfoTip";
 import { C } from "../../theme";
 import { series, axis, grid, tooltipStyle } from "../charts/chartTheme";
 import { invalidateBacktest } from "../../hooks/useBacktest";
@@ -14,7 +13,7 @@ const DIAGONAL = [{ x: 0, y: 0 }, { x: 1, y: 1 }];
 
 // Predicted probability bucket vs observed frequency, with the diagonal
 // drawn. This depends on GET /model/backtest, which a concurrent engineer is
-// building — it may 404. That is not an error state to hide; it is the
+// building - it may 404. That is not an error state to hide; it is the
 // honest current state of "calibration has not been measured yet."
 export default function CalibrationPanel() {
   const [status, setStatus] = useState("loading"); // loading | not-built | not-measured | error | ready
@@ -56,12 +55,6 @@ export default function CalibrationPanel() {
     <Card>
       <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
         <span style={{ fontSize: 14, fontWeight: 700, color: C.slate800 }}>Calibration</span>
-        <InfoTip label="About calibration">
-          Predicted probability bucket against observed frequency. Points on the dashed
-          diagonal are well calibrated; above it the model is under-confident, below it
-          over-confident. This answers whether a stated 70% actually happens about 70% of
-          the time.
-        </InfoTip>
       </div>
 
       {status === "loading" && <EmptyState kind="loading" title="Loading calibration data…" />}
@@ -70,7 +63,7 @@ export default function CalibrationPanel() {
         <EmptyState
           kind="not-measured"
           title="Not yet measured"
-          detail="GET /model/backtest is not available on this backend yet — calibration has not been computed. This is not a zero, it is an absent measurement."
+          detail="GET /model/backtest is not available on this backend yet - calibration has not been computed. This is not a zero, it is an absent measurement."
           action={
             <button onClick={runBacktest} disabled={running} style={runBtnStyle(running)}>
               {running ? "Attempting…" : "Try running a backtest"}
@@ -116,8 +109,8 @@ function CalibrationChart({ buckets }) {
         />
         {/* Grey and dashed: the diagonal is the reference the points are read
             against, not a series competing with them. */}
-        {/* The diagonal is the whole point of the chart — points are read as
-            above or below it — so it is green and dashed rather than a faint
+        {/* The diagonal is the whole point of the chart - points are read as
+            above or below it - so it is green and dashed rather than a faint
             grey that disappeared into the gridlines. */}
         <Line data={DIAGONAL} dataKey="y" stroke={series.baseline} strokeWidth={2} strokeDasharray="4 4" dot={false} name="Perfect calibration" legendType="none" />
         <Scatter data={buckets.map((b) => ({ x: b.predicted, y: b.observed, count: b.count }))}
@@ -134,7 +127,7 @@ function CalibrationChart({ buckets }) {
  * names like `predicted_prob` and `observed_freq`. The endpoint actually returns
  * `calibration_buckets` with `confidence_range` / `predictions` /
  * `actual_hit_rate_pct`, so none of the shapes it "defensively" accepted was the
- * real one and the panel could never render — it reported "not yet measured"
+ * real one and the panel could never render - it reported "not yet measured"
  * even against a completed 1,140-match backtest. The real shape is now handled
  * first; the rest are kept as fallbacks. */
 function parseBuckets(data) {

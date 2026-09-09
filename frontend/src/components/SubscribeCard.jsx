@@ -51,17 +51,12 @@ export default function SubscribeCard() {
 
   return (
     <section className="pl-subscribe" aria-labelledby="subscribe-heading">
-      <h2 id="subscribe-heading">Get every prediction by email</h2>
-      <p>
-        The model's call on each fixture shortly before kickoff, then the result
-        and how that call went shortly after the final whistle. Two emails per
-        match, and every one of them has an unsubscribe link.
-      </p>
+      <h2 id="subscribe-heading">Predictions by email</h2>
+      <p>The call before kickoff, the result after. Unsubscribe any time.</p>
 
       {state === "sent" ? (
         <p style={{ margin: 0, fontWeight: 600, color: "#00ff85" }} role="status">
-          Check your inbox — open the confirmation link and you're subscribed.
-          Nothing is sent until you do.
+          Check your inbox and open the confirmation link.
         </p>
       ) : (
         <form className="pl-subscribe-form" onSubmit={submit}>
@@ -91,16 +86,14 @@ export default function SubscribeCard() {
 
       {undeliverable && (
         <p className="pl-subscribe-note" role="status">
-          Email delivery isn't configured on this instance yet, so sign-ups are
-          closed rather than silently going nowhere.
+          Email isn't configured yet, so sign-ups are closed.
         </p>
       )}
 
+      {/* The timing caveat stays, because it is a promise being made. It is one
+          line now instead of two sentences. */}
       <p className="pl-subscribe-note">
-        {/* The timing caveat, stated where someone is deciding to sign up rather
-            than buried in a policy page. */}
-        Emails go out in a window before kickoff, not at an exact minute — the
-        scheduler runs every five minutes and free infrastructure drifts.
+        Sent shortly before kickoff, not at an exact minute.
         {status?.confirmed > 0 && ` ${status.confirmed} subscribed.`}
       </p>
     </section>

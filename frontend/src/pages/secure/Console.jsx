@@ -11,7 +11,7 @@ import { C, radius, space, type } from "../../theme";
  * login: an open retrain button is a denial-of-service control on a 0.1 vCPU
  * instance, and an open refresh is a way to churn the database.
  *
- * The public Model page keeps the metrics, calibration and baselines — those are
+ * The public Model page keeps the metrics, calibration and baselines - those are
  * the numbers that let a visitor judge the model, and hiding them would make the
  * app less honest, not more secure. */
 export default function Console() {

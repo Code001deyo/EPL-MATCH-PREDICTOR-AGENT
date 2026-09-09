@@ -4,8 +4,8 @@ import { API } from "../config";
 
 /* Shared access to GET /model/backtest.
  *
- * Three panels on the dashboard read this payload — the accuracy trend, the
- * season comparison and calibration — and each mounting its own request would
+ * Three panels on the dashboard read this payload - the accuracy trend, the
+ * season comparison and calibration - and each mounting its own request would
  * fire three identical calls for one response. The in-flight promise is cached
  * at module scope so they share a single round trip.
  *
@@ -21,7 +21,7 @@ function fetchBacktest() {
       (e) => {
         // A 404 means the endpoint isn't there; anything else is a real failure.
         // They are different states and the panels render them differently.
-        cached = null;   // don't cache a failure — a retry should actually retry
+        cached = null;   // don't cache a failure - a retry should actually retry
         return { data: null, status: e?.response?.status === 404 ? "not-measured" : "error" };
       }
     );

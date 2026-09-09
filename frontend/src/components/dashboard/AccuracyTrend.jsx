@@ -6,7 +6,6 @@ import {
 import Card from "../ui/Card";
 import SectionTitle from "../ui/SectionTitle";
 import EmptyState from "../ui/EmptyState";
-import InfoTip from "../ui/InfoTip";
 import { C, type, space } from "../../theme";
 import { series, baselineLine, axis, grid, tooltipStyle, legendStyle, pct, rollingMean, deltaColor } from "../charts/chartTheme";
 import useBacktest from "../../hooks/useBacktest";
@@ -15,7 +14,7 @@ const WINDOW = 5;
 
 /* The dashboard's headline chart.
  *
- * GET /model/backtest already returns `by_matchweek` — 114 scored matchweeks
+ * GET /model/backtest already returns `by_matchweek` - 114 scored matchweeks
  * across three seasons, each with the model's correct-result % and the
  * always-home baseline for the same fixtures. Nothing in the app rendered it.
  * A dashboard that leads with a single accuracy number cannot show whether that
@@ -42,13 +41,6 @@ export default function AccuracyTrend() {
           two lines of paragraph above a chart on a dashboard any more. */}
       <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
         <span style={{ ...type.section, color: C.slate800 }}>Accuracy over time</span>
-        <InfoTip label="About the accuracy trend">
-          Correct-result rate per matchweek across the backtested seasons, smoothed over a
-          trailing {WINDOW}-week window — a single matchweek is only 10 matches and swings
-          wildly on sample size alone. Trailing rather than centred, so no point is computed
-          from weeks that had not happened yet. The dashed line is the always-home baseline
-          over the same fixtures; hover any point for that week's raw figure.
-        </InfoTip>
       </div>
 
       {state === "loading" && <EmptyState kind="loading" />}
@@ -72,7 +64,7 @@ export default function AccuracyTrend() {
               <Legend wrapperStyle={legendStyle} />
 
               {/* Season boundaries: accuracy is not comparable straight across
-                  them — each new season refits on a squad the model has not seen. */}
+                  them - each new season refits on a squad the model has not seen. */}
               {seasons.map((s) => (
                 <ReferenceLine key={s.label} x={s.label} stroke={C.blueDark} strokeOpacity={0.45}
                   strokeDasharray="2 4" label={{ value: s.season, position: "insideTopLeft", fontSize: 10, fill: C.blueDark }} />
@@ -166,7 +158,7 @@ function prepare(rows) {
   return rollingMean(withLabels, ["correct_result_pct", "always_home_pct"], WINDOW);
 }
 
-// First matchweek of each season after the first — the ones worth marking.
+// First matchweek of each season after the first - the ones worth marking.
 function seasonBoundaries(rows) {
   const seen = new Set();
   const out = [];

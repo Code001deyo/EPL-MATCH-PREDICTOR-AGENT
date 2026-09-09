@@ -3,13 +3,13 @@
  * Everything here was previously an inline style object, which cannot express
  * the four things this file exists for: media queries, :hover and :focus-visible,
  * fluid type via clamp(), and prefers-reduced-motion. Those were not omitted by
- * choice — inline styles simply have no syntax for them, so the app had no hover
+ * choice - inline styles simply have no syntax for them, so the app had no hover
  * states, no keyboard focus ring, and layouts that squeezed rather than reflowed.
  *
  * theme.js stays the single source of truth for colour. The tokens below are
  * copied from it deliberately rather than injected at runtime: a stylesheet that
  * needs JavaScript to have colours flashes unstyled on first paint. If a value
- * changes in theme.js it changes here too — the pairing is asserted nowhere, so
+ * changes in theme.js it changes here too - the pairing is asserted nowhere, so
  * it is written down here instead.
  */
 
@@ -33,7 +33,7 @@
   --slate-800: #1e293b;
   --white: #ffffff;
 
-  /* Semantic — judge a number, never decorate a chart */
+  /* Semantic - judge a number, never decorate a chart */
   --good: #2f8f5b;
   --warn: #a4650f;
   --bad: #b3123a;
@@ -72,7 +72,7 @@ input:not([type="hidden"]),
  * Forcing 44px everywhere padded the desktop sidebar out and made the menu
  * heavier than it should be, for no benefit: 44px is a guideline about fingers,
  * and a mouse pointer hits a 37px row exactly as well. `pointer: coarse` is the
- * question actually being asked — "is this being touched?" — rather than a width
+ * question actually being asked - "is this being touched?" - rather than a width
  * breakpoint standing in for it, which would also catch a small desktop window.
  */
 @media (pointer: coarse) {
@@ -93,7 +93,7 @@ input:not([type="hidden"]),
 }
 
 /* Read by screen readers, invisible on screen. Used to give a probability bar a
-   text equivalent — colour and width alone say nothing to a screen reader, and
+   text equivalent - colour and width alone say nothing to a screen reader, and
    several clubs share a palette. */
 .pl-sr-only {
   position: absolute;
@@ -244,11 +244,122 @@ input:not([type="hidden"]),
   color: var(--slate-500);
 }
 
-/* --- title race --------------------------------------------------------- */
+/* --- tables ---------------------------------------------------------------
+ *
+ * The shape a football table is read in. Three things do most of the work and
+ * all three are commonly missed on the web:
+ *
+ *   tabular-nums   digits share a width, so a column of numbers lines up and can
+ *                  be compared by eye down the column rather than read one by one
+ *   right-aligned  numbers align on their units, so 9 and 51 stack correctly
+ *   a real <table> with <th scope>, so a screen reader announces "Arsenal,
+ *                  Points, 9" instead of reading twenty numbers with no headings
+ */
 
-/* Granularity switch. A segmented control rather than a dropdown: there are four
-   options, they are mutually exclusive, and the current one should be readable
-   without opening anything. */
+.pl-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.pl-table thead th {
+  padding: 0 10px 8px;
+  text-align: left;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--slate-500);
+  border-bottom: 2px solid var(--slate-200);
+  white-space: nowrap;
+}
+
+.pl-table tbody td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--slate-100);
+  color: var(--slate-700);
+  vertical-align: middle;
+}
+
+.pl-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.pl-table tbody tr:hover td {
+  background: var(--slate-50);
+}
+
+/* Numbers: right-aligned and same-width digits. */
+.pl-table .pl-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pl-table thead .pl-num {
+  text-align: right;
+}
+
+.pl-table .pl-strong {
+  font-weight: 800;
+  color: var(--pl-purple);
+}
+
+.pl-table .pl-pos {
+  color: var(--slate-400);
+  font-weight: 700;
+  width: 2.5rem;
+}
+
+.pl-club {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+/* The club's line on the chart above, so a row ties to a line. */
+.pl-club-chip {
+  width: 3px;
+  height: 18px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.pl-club-name {
+  font-weight: 600;
+  color: var(--slate-800);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Below the phone breakpoint the least-load-bearing columns go rather than the
+   table being squeezed until every column is unreadable. Position, club, points
+   and title probability are what the page is for. */
+@media (max-width: 620px) {
+  .pl-table th:nth-child(3),
+  .pl-table td:nth-child(3),
+  .pl-table th:nth-child(5),
+  .pl-table td:nth-child(5),
+  .pl-table th:nth-child(7),
+  .pl-table td:nth-child(7),
+  .pl-table th:nth-child(8),
+  .pl-table td:nth-child(8) {
+    display: none;
+  }
+
+  .pl-table thead th,
+  .pl-table tbody td {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+}
+
+/* --- segmented control ---------------------------------------------------- */
+
+/* Four mutually exclusive options where the current one should be readable
+   without opening anything, so a segmented control rather than a dropdown. */
 .pl-seg {
   display: inline-flex;
   flex-wrap: wrap;
@@ -259,10 +370,7 @@ input:not([type="hidden"]),
 }
 
 .pl-seg button {
-  /* 44, not the 32 this started at. The rule above says 44px and a component
-     that quietly opts out of the project's own accessibility floor is worse than
-     not having the rule. */
-  min-height: 44px;
+  min-height: 36px;
   padding: 0 12px;
   border: none;
   border-radius: 8px;
@@ -275,6 +383,8 @@ input:not([type="hidden"]),
   transition: background 0.12s ease, color 0.12s ease;
 }
 
+
+
 .pl-seg button:hover:not([aria-pressed="true"]) {
   background: rgba(55, 0, 60, 0.06);
   color: var(--pl-purple);
@@ -286,63 +396,30 @@ input:not([type="hidden"]),
   box-shadow: var(--shadow-card);
 }
 
-/* The chart key: all twenty clubs, wrapped into as many columns as fit. A single
-   column would be twenty rows of mostly-empty space, which is what this replaced. */
-.pl-race-key {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 258px), 1fr));
-  gap: 2px 18px;
-  border-top: 1px solid var(--slate-100);
-  padding-top: 14px;
-}
-
-.pl-race-key-row {
-  display: grid;
-  /* Widened from 230px columns: "Bournemouth" and "Nott'm Forest" were being
-     truncated, and a club name cut to "Nott'm Fo..." reads as a rendering fault
-     rather than as a deliberate abbreviation. */
-  grid-template-columns: 1.3rem 18px minmax(0, 1fr) 3rem 2.4rem;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 0;
+/* Season picker. A real select, because the list grows by one every year and a
+   segmented control does not. */
+.pl-select {
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--slate-200);
+  background: var(--white);
+  color: var(--slate-700);
+  font-family: inherit;
   font-size: 0.8125rem;
-}
-
-.pl-race-rank {
-  font-size: 0.6875rem;
-  font-weight: 700;
-  color: var(--slate-400);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
-/* The line key. Matches the stroke on the chart above. */
-.pl-race-swatch {
-  height: 3px;
-  border-radius: 2px;
-  display: block;
-}
-
-.pl-race-club {
   font-weight: 600;
-  color: var(--slate-800);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  cursor: pointer;
 }
 
-.pl-race-pct {
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  color: var(--pl-purple);
-  text-align: right;
-}
-
-.pl-race-move {
-  font-size: 0.6875rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
+/* On a touch screen every control grows to the 44px a thumb needs. On a mouse
+   these stay at 36px, which is comfortable to click and keeps a control row from
+   dominating the card it sits in. WCAG 2.5.8 asks 24px of any target; 44px is
+   the touch guideline, and this applies each where it belongs. */
+@media (pointer: coarse) {
+  .pl-seg button,
+  .pl-select {
+    min-height: 44px;
+  }
 }
 
 /* --- tables that become cards ------------------------------------------ */

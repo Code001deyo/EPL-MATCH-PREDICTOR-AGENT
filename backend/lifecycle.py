@@ -96,6 +96,7 @@ def _refresh_live_data():
         "statistics_status": None,
         "settled": None,
         "schedule": None,
+        "clubs": None,
         "title_race": None,
     }
 
@@ -111,6 +112,15 @@ def _refresh_live_data():
         result["schedule"] = sync_fixtures(season)
     except Exception as exc:
         _record_error("refresh:schedule", exc)
+
+    # Club identity, for badges. Cheap and near-static, but promotion happens
+    # every summer and a club arriving without a badge is a defect nobody would
+    # think to go looking for.
+    try:
+        from data.clubs import sync_clubs
+        result["clubs"] = sync_clubs()
+    except Exception as exc:
+        _record_error("refresh:clubs", exc)
 
     try:
         reports = enrich_all([season])

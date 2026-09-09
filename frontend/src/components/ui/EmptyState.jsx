@@ -1,7 +1,7 @@
 import { C, semantic, radius } from "../../theme";
 
 // The one honest way to say "there is nothing to show yet." Never render a
-// 0%, a blank chart axis, or a placeholder number in its place — this is the
+// 0%, a blank chart axis, or a placeholder number in its place - this is the
 // component that renders instead.
 //
 // kind: "loading" | "not-measured" | "error"

@@ -10,8 +10,8 @@ const POLL_MS = 2000;
 /* Retraining is a background job, not a request.
  *
  * The button used to fire a single blocking POST with no timeout and no
- * progress. Training ran for minutes — longer than a browser will hold an idle
- * connection — so a retrain that succeeded on the server was regularly reported
+ * progress. Training ran for minutes - longer than a browser will hold an idle
+ * connection - so a retrain that succeeded on the server was regularly reported
  * to the user as "Retrain failed."
  *
  * The backend now answers 202 with a job id straight away. This polls it, so
@@ -60,7 +60,7 @@ export default function RetrainPanel({ onComplete }) {
         }
       } catch (e) {
         if (cancelled) return;
-        // A polling blip is not a failed retrain — the job is server-side and
+        // A polling blip is not a failed retrain - the job is server-side and
         // keeps running. Say so rather than declaring failure.
         setError("Lost contact while polling; the job may still be running.");
       }
@@ -92,7 +92,7 @@ export default function RetrainPanel({ onComplete }) {
 
   return (
     <Card>
-      <SectionTitle sub="Fits 12 models over the full match history. Runs server-side — you can leave this page.">
+      <SectionTitle sub="Fits 12 models over the full match history. Runs server-side - you can leave this page.">
         Model retraining
       </SectionTitle>
 
@@ -126,7 +126,7 @@ export default function RetrainPanel({ onComplete }) {
 
       {running && (
         <div style={{ marginTop: space.md, height: 6, background: C.slate100, borderRadius: 3, overflow: "hidden" }}>
-          {/* Indeterminate while the feature matrix builds — that stage has no
+          {/* Indeterminate while the feature matrix builds - that stage has no
               countable unit of work, and a fake percentage would be a made-up
               number in a project whose whole point is not inventing those. */}
           <div style={{

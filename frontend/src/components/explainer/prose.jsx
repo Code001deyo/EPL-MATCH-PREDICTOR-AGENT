@@ -5,7 +5,7 @@ import { C, radius, space, type } from "../../theme";
  *
  * Every other page in this app is a dashboard: short labels, numbers, tables.
  * This one is the only page with running prose, which needs things none of the
- * existing ui/ components provide — a measure that keeps lines near 65
+ * existing ui/ components provide - a measure that keeps lines near 65
  * characters, a pulled-out figure, and an aside that carries a caveat without
  * looking like a warning. They live here rather than in ui/ because a component
  * used on exactly one page is not yet a shared treatment, and promoting it into
@@ -55,7 +55,7 @@ export function Pull({ value, unit, children }) {
   );
 }
 
-// A caveat or a reframing. Deliberately not semantic.warn — nothing here is
+// A caveat or a reframing. Deliberately not semantic.warn - nothing here is
 // wrong, and tinting it amber would tell the reader to worry about a passage
 // whose job is to reassure them.
 export function Aside({ label, children }) {

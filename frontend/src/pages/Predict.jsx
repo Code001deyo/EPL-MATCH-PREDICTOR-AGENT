@@ -162,7 +162,7 @@ function PredictionResult({ result }) {
             <div style={{ fontSize: 56, fontWeight: 800, color: C.blue, lineHeight: 1 }}>{result.home_goals}</div>
             <div style={{ fontSize: 11, color: C.slate400, marginTop: 4 }}>Predicted</div>
           </div>
-          <div style={{ fontSize: 28, color: C.slate300, fontWeight: 300 }}>—</div>
+          <div style={{ fontSize: 28, color: C.slate300, fontWeight: 300 }}>-</div>
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 11, color: C.slate400, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>{awayTeam}</div>
             <div style={{ fontSize: 56, fontWeight: 800, color: C.rose, lineHeight: 1 }}>{result.away_goals}</div>

@@ -3,7 +3,7 @@
 Two kinds of message, kept deliberately separate.
 
 **The password-reset link** goes to a FIXED address from RESET_EMAIL_TO, never to
-an address supplied in a request — an endpoint that mailed a valid reset link
+an address supplied in a request - an endpoint that mailed a valid reset link
 wherever the caller asked would hand out account access to anyone who could type.
 That restriction is unchanged and must stay.
 
@@ -47,7 +47,7 @@ def send_reset_email(reset_url: str, username: str) -> bool:
             f"RESEND_API_KEY={'set' if api_key else 'MISSING'}, "
             f"RESET_EMAIL_TO={'set' if to else 'MISSING'}. "
             "The caller was given the usual generic response, so this is invisible "
-            "to them — fix the configuration or resets cannot be completed."
+            "to them - fix the configuration or resets cannot be completed."
         )
         return False
 
@@ -56,11 +56,11 @@ def send_reset_email(reset_url: str, username: str) -> bool:
         f"'{username}'.\n\n"
         f"Open this link to choose a new password. It can be used once and expires "
         f"in 30 minutes:\n\n{reset_url}\n\n"
-        f"If you did not request this, no action is needed — the link cannot be used "
+        f"If you did not request this, no action is needed - the link cannot be used "
         f"without opening it, and requesting a new reset invalidates this one."
     )
 
-    return send(to, "EPL Predictor — password reset", text, sender=sender)
+    return send(to, "EPL Predictor - password reset", text, sender=sender)
 
 
 def send(to: str, subject: str, text: str, html: str | None = None,
@@ -87,7 +87,7 @@ def send(to: str, subject: str, text: str, html: str | None = None,
     if headers:
         # List-Unsubscribe lives here. Mail clients surface it as a one-click
         # unsubscribe, which is what keeps a small sending domain out of spam
-        # folders — a subscriber who cannot leave easily reports instead.
+        # folders - a subscriber who cannot leave easily reports instead.
         payload["headers"] = headers
 
     try:
@@ -98,7 +98,7 @@ def send(to: str, subject: str, text: str, html: str | None = None,
             timeout=15,
         )
         if response.status_code >= 400:
-            # The body carries Resend's reason — an unverified domain, usually.
+            # The body carries Resend's reason - an unverified domain, usually.
             print(f"[mail] Resend rejected {subject!r} to {to}: "
                   f"HTTP {response.status_code} {response.text[:300]}")
             return False

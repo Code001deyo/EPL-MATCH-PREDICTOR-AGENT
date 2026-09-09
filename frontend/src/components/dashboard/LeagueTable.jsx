@@ -4,13 +4,14 @@ import Card from "../ui/Card";
 import SectionTitle from "../ui/SectionTitle";
 import EmptyState from "../ui/EmptyState";
 import DataTable from "../ui/DataTable";
+import Crest from "../crest/Crest";
 import { C, radius, type } from "../../theme";
 import { API } from "../../config";
 
 /* The standings, per division.
  *
  * There is a table here for each league because there are two leagues in the
- * database and only one of them was ever shown — blended into the other. The
+ * database and only one of them was ever shown - blended into the other. The
  * league endpoint had no division filter, so a "Premier League" table listed 44
  * clubs and ranked Coventry first on 46 games played, its Championship and Premier
  * League matches summed into one row.
@@ -51,7 +52,12 @@ export default function LeagueTable({ season }) {
 
   const columns = [
     { key: "pos", header: "#", numeric: true, width: 34, render: (_r, i) => i + 1 },
-    { key: "team", header: "Team", nowrap: true, minWidth: 120, render: (r) => <span style={{ fontWeight: 600, color: C.slate800 }}>{r.team}</span> },
+    { key: "team", header: "Team", nowrap: true, minWidth: 140, render: (r) => (
+      <span className="pl-club">
+        <Crest team={r.team} size={20} />
+        <span className="pl-club-name">{r.team}</span>
+      </span>
+    ) },
     { key: "played", header: "P", numeric: true, width: 40 },
     { key: "won", header: "W", numeric: true, width: 40 },
     { key: "drawn", header: "D", numeric: true, width: 40 },

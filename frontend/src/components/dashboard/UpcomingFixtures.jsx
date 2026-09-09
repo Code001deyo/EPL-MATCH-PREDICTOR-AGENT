@@ -6,6 +6,7 @@ import SectionTitle from "../ui/SectionTitle";
 import EmptyState from "../ui/EmptyState";
 import { C, space, type, radius } from "../../theme";
 import { API } from "../../config";
+import Crest from "../crest/Crest";
 
 const SHOW = 8;
 
@@ -77,7 +78,7 @@ export default function UpcomingFixtures() {
                 // Matchweek column is fixed; the teams take the slack and the
                 // kickoff wraps under on narrow screens rather than overflowing.
                 // Every track has a zero minimum. A grid item defaults to
-                // min-width:auto, which means "never shrink below my content" —
+                // min-width:auto, which means "never shrink below my content" -
                 // so a long kickoff label ("Sat 12 Sep 2026, 15:00 BST") widened
                 // this row to 564px and pushed the whole dashboard into a
                 // horizontal scroll at 320 and 375.
@@ -88,8 +89,13 @@ export default function UpcomingFixtures() {
                 background: C.slate50,
               }}>
                 <span style={{ ...type.micro, color: C.slate500 }}>MW{f.matchweek}</span>
-                <span style={{ ...type.bodyStrong, color: C.slate800, minWidth: 0 }}>
-                  {f.home_team} <span style={{ color: C.slate400, fontWeight: 400 }}>v</span> {f.away_team}
+                <span style={{ ...type.bodyStrong, color: C.slate800, minWidth: 0,
+                               display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <Crest team={f.home_team} size={18} />
+                  {f.home_team}
+                  <span style={{ color: C.slate400, fontWeight: 400 }}>v</span>
+                  <Crest team={f.away_team} size={18} />
+                  {f.away_team}
                 </span>
                 <span style={{ ...type.micro, fontWeight: 400, color: C.slate400, textAlign: "right", minWidth: 0 }}>
                   {f.kickoff}

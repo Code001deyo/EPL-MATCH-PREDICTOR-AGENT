@@ -2,13 +2,13 @@
  *
  * Premier League club crests are registered trademarks. There is no
  * open-licensed set of them, and the ones served from public football APIs are
- * not licensed for reuse either — they are simply reachable. So none are shipped
+ * not licensed for reuse either - they are simply reachable. So none are shipped
  * here. What is shipped is each club's actual primary and secondary colour,
  * which are facts about the club rather than protected artwork, and a monogram
  * badge drawn from them (see Crest.jsx).
  *
  * `crestUrl` is the escape hatch. Set it for a club and the badge renders that
- * image instead — so licensed assets can be dropped in later, per club, without
+ * image instead - so licensed assets can be dropped in later, per club, without
  * touching a component.
  *
  * Names are PulseLive `shortName` values, because that is what the API stores
@@ -76,7 +76,7 @@ const ALIASES = {
 };
 
 /* A club the manifest does not know still has to render. Neutral Premier League
- * purple with its own initials beats a blank space or a crash — and it looks
+ * purple with its own initials beats a blank space or a crash - and it looks
  * deliberate enough that a missing entry is not embarrassing, only unbranded. */
 const UNKNOWN = { abbr: "", primary: "#37003c", secondary: "#00ff85", text: "#FFFFFF" };
 

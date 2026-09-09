@@ -132,12 +132,14 @@ function audit(minTap, isTouch) {
     //
     // The exemption matters. A check that flags every footer link produces noise
     // nobody reads, which is worse than not checking.
-    // Navigation links are held to the touch target only on a touch viewport,
-    // matching the `pointer: coarse` rule in the stylesheet.
-    const navLink = el.matches("nav a");
-    if (el.matches('button, [role="button"], input, select') || (navLink && isTouch)) {
-      if (box.height > 0 && box.height < minTap) {
-        smallTaps.push(`${describe(el)} (${Math.round(box.height)}px, control)`);
+    // Controls are held to 44px on a touch viewport and to the WCAG 2.5.8 floor
+    // of 24px elsewhere, matching the `pointer: coarse` rules in the stylesheet.
+    // Demanding finger-sized controls on a desktop only makes control rows
+    // dominate the cards they sit in, which is how the sidebar got too heavy.
+    if (el.matches('button, [role="button"], input, select, nav a')) {
+      const floor = isTouch ? minTap : 24;
+      if (box.height > 0 && box.height < floor) {
+        smallTaps.push(`${describe(el)} (${Math.round(box.height)}px, control, floor ${floor}px)`);
       }
     } else if (el.matches("a[href]")) {
       const inline = getComputedStyle(el).display.startsWith("inline");

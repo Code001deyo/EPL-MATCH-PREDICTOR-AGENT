@@ -12,7 +12,7 @@ const MAX = 60;
  *
  * Three roles, three weights, and they are not decoration: the model is the
  * subject, the market is its peer and the only figure that bounds it, and the two
- * baselines are furniture — what you get for free. Painting all four the same
+ * baselines are furniture - what you get for free. Painting all four the same
  * would make "the market" and "a random guess" look like equal members of a set.
  */
 export default function AccuracyLadder() {

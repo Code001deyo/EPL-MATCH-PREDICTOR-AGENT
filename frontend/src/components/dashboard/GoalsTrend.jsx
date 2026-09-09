@@ -1,7 +1,6 @@
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import Card from "../ui/Card";
 import EmptyState from "../ui/EmptyState";
-import InfoTip from "../ui/InfoTip";
 import { C, type } from "../../theme";
 import { series, axis, grid, tooltipStyle, legendStyle } from "../charts/chartTheme";
 
@@ -18,13 +17,6 @@ export default function GoalsTrend({ league, loading, season, divisionName }) {
     <Card>
       <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
         <span style={{ ...type.section, color: C.slate800 }}>Scoring trend</span>
-        <InfoTip label="About the scoring trend">
-          Goals scored per matchweek, home against away, for {season || "the selected season"}
-          {divisionName ? ` in the ${divisionName}` : ""}.
-          {rows.length ? ` Showing ${rows.length} matchweek${rows.length === 1 ? "" : "s"}.` : ""}
-          {" "}Championship rounds are derived from fixture dates, because the source files
-          carry no round number.
-        </InfoTip>
       </div>
 
       {loading && <EmptyState kind="loading" />}

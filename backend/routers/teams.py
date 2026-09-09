@@ -183,6 +183,19 @@ def upcoming_fixtures():
         return {"error": str(e), "fixtures": []}
 
 
+@router.get("/clubs")
+def clubs(db: Session = Depends(get_db)):
+    """Club identity, including the official badge URL.
+
+    Public and cached hard by the client: it changes once a season, when clubs
+    are promoted. Returning it as one document means the frontend resolves a
+    badge without a request per club.
+    """
+    from db.clubs import all_clubs
+
+    return {"clubs": all_clubs(db)}
+
+
 @router.get("/fixtures/current")
 def current_season_fixtures(db: Session = Depends(get_db)):
     return fixtures_by_season(current_season(), db)

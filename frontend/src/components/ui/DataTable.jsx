@@ -25,7 +25,7 @@ export default function DataTable({ columns, rows, rowKey, rowStyle, empty, dens
         <thead>
           <tr>
             {columns.map((c) => (
-              <th key={c.key} style={{
+              <th scope="col" key={c.key} style={{
                 padding: pad,
                 textAlign: c.numeric ? "right" : c.align || "left",
                 ...type.micro, color: C.slate400,

@@ -2,7 +2,7 @@
  *
  * These are deliberately hardcoded rather than fetched, and that is worth stating
  * plainly. The page is an argument about how to *read* a football model, and its
- * numbers come from a specific measured study — a 1,140-match walk-forward
+ * numbers come from a specific measured study - a 1,140-match walk-forward
  * backtest, plus five alternative architectures trained on 1,520 matches and
  * scored on a season none of them had seen. The live endpoints do not serve the
  * alternatives, and never will: nothing in production trains a direct classifier
@@ -10,7 +10,7 @@
  *
  * The consequence is that these are a snapshot with a date on them, not live
  * telemetry, and the page says so where a reader can see it. If a retrain moves
- * the headline figures, `MEASURED_ON` and the numbers here are what to update —
+ * the headline figures, `MEASURED_ON` and the numbers here are what to update -
  * the Model and Dashboard pages remain the live view.
  */
 
@@ -27,7 +27,7 @@ export const ACCURACY_LADDER = [
 ];
 
 // The same three seasons, separated. The point of this table is that the model
-// and the market rise and fall *together* — a season is a much larger effect
+// and the market rise and fall *together* - a season is a much larger effect
 // than any modelling decision, and the model's own trend in isolation is
 // therefore close to meaningless.
 export const BY_SEASON = [

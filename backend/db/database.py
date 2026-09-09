@@ -348,6 +348,7 @@ def init_db():
     # a failure that shows up later as "no such table" from a router, far from
     # its cause. Imported here rather than at module scope because those modules
     # import Base from this one.
+    import db.clubs  # noqa: F401  (registers Club)
     import db.fixtures  # noqa: F401  (registers Fixture)
     import db.subscribers  # noqa: F401  (registers Subscriber, NotificationLog)
     import db.race  # noqa: F401  (registers TitleOddsSnapshot)

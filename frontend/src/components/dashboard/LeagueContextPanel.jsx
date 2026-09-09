@@ -5,7 +5,7 @@ import Stat from "../ui/Stat";
 import EmptyState from "../ui/EmptyState";
 import { C } from "../../theme";
 
-// League context — secondary to model performance. Describes the league,
+// League context - secondary to model performance. Describes the league,
 // not the model, so it is deliberately quieter: muted card, smaller stats,
 // no brand-green chart fills competing with the performance band above.
 export default function LeagueContextPanel({ league, loading, season }) {
@@ -34,7 +34,7 @@ export default function LeagueContextPanel({ league, loading, season }) {
           {top6Form.length > 0 ? (
             <>
               <div style={{ fontSize: 12, color: C.slate500, fontWeight: 600, marginBottom: 8 }}>
-                Form points, last 5 games — top 6
+                Form points, last 5 games - top 6
               </div>
               <ResponsiveContainer width="100%" height={160}>
                 <BarChart data={top6Form} layout="vertical" margin={{ left: 10, right: 20 }}>

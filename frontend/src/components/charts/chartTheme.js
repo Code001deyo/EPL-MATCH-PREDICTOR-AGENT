@@ -7,7 +7,7 @@
  *
  * The token rule from theme.js still applies and is the reason this file exists
  * rather than a single flat palette: `series` below draws from the EPL BRAND
- * tokens, because a chart line is decoration — it identifies a series, it does
+ * tokens, because a chart line is decoration - it identifies a series, it does
  * not judge it. `semantic` (good/warn/bad) stays reserved for saying a number is
  * good or bad. A model's accuracy line must not be green because the accuracy is
  * good; it is green because it is the model's line.
@@ -16,7 +16,7 @@ import { C, semantic } from "../../theme";
 
 // Series colours, in the order a chart should reach for them.
 //
-// Both are brand colours — PL purple and PL green — and neither is grey. Grey
+// Both are brand colours - PL purple and PL green - and neither is grey. Grey
 // series on a white card wash out: at 1-2px a #cbd5e1 line is barely above the
 // gridlines, so the baseline the model is being judged against was the hardest
 // thing on the chart to see. The comparison has to be legible for the comparison
@@ -26,13 +26,13 @@ import { C, semantic } from "../../theme";
 // bright green is a fill and background colour, and as a 2px line on white it has
 // too little contrast to read.
 export const series = {
-  primary: C.navy,        // PL purple — the subject of the chart (the model)
-  accent: C.blue,         // PL green — a second series of equal standing
+  primary: C.navy,        // PL purple - the subject of the chart (the model)
+  accent: C.blue,         // PL green - a second series of equal standing
   muted: C.blueDark,      // supporting series that must not compete for attention
   baseline: C.blueDark,   // reference lines: the diagonal, always-home, zero
 };
 
-// A baseline is not a rival series, so it stays dashed — the dash pattern, not a
+// A baseline is not a rival series, so it stays dashed - the dash pattern, not a
 // washed-out colour, is what says "this is the floor being cleared".
 export const baselineLine = {
   stroke: series.baseline,
@@ -78,7 +78,7 @@ export const pct = (v) => `${Math.round(v)}%`;
  * conclusions from spikes that are not there.
  *
  * Trailing, not centred, so no point is computed from weeks that had not happened
- * yet — the same point-in-time discipline the features follow. The first
+ * yet - the same point-in-time discipline the features follow. The first
  * `window - 1` points average over what exists so far rather than being dropped,
  * so the line starts where the data starts; they are correspondingly noisier,
  * which is honest for an early-season average.

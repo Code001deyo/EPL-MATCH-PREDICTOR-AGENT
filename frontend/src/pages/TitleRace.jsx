@@ -25,8 +25,8 @@ import { C } from "../theme";
  * The first build led with a twenty-row bar chart and put the trend below the
  * fold, which had it backwards: most of those rows sit at 0% and render as empty
  * track, so the loudest thing on the page was a list of clubs with no chance,
- * while the one element that actually shows a race — probability moving over time
- * — was the thing you had to scroll to find.
+ * while the one element that actually shows a race - probability moving over time
+ * - was the thing you had to scroll to find.
  *
  * Now the chart leads, every club is plotted, and the list underneath is the
  * chart's key rather than a second visualisation competing with it.
@@ -36,12 +36,35 @@ export default function TitleRace() {
   const [history, setHistory] = useState([]);
   const [error, setError] = useState(null);
   const [granularity, setGranularity] = useState("matchweek");
+  const [seasons, setSeasons] = useState([]);
+  const [season, setSeason] = useState(null);
 
+  // Which seasons have a stored race. Fetched once; the selector defaults to the
+  // current one.
   useEffect(() => {
     let live = true;
+    axios
+      .get(`${API}/race/seasons`)
+      .then(({ data }) => {
+        if (!live) return;
+        setSeasons(data.seasons || []);
+        setSeason((held) => held || data.current);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!season) return undefined;
+    let live = true;
+    setCurrent(null);
+    setHistory([]);
+    const q = `?season=${encodeURIComponent(season)}`;
     Promise.all([
-      axios.get(`${API}/race/current`),
-      axios.get(`${API}/race/history`),
+      axios.get(`${API}/race/current${q}`),
+      axios.get(`${API}/race/history${q}`),
     ])
       .then(([now, past]) => {
         if (!live) return;
@@ -52,7 +75,7 @@ export default function TitleRace() {
     return () => {
       live = false;
     };
-  }, []);
+  }, [season]);
 
   const teams = current?.teams || [];
 
@@ -92,7 +115,7 @@ export default function TitleRace() {
     <>
       <Masthead title="The title race">
         Every remaining fixture, played out ten thousand times after each refresh.
-        A club's line is the share of those simulated seasons it finished top —
+        A club's line is the share of those simulated seasons it finished top -
         not a forecast, and not a market price.
       </Masthead>
 
@@ -123,9 +146,25 @@ export default function TitleRace() {
                   Title probability over time
                 </h2>
                 <p style={{ margin: "4px 0 0", fontSize: 12, color: C.slate500 }}>
-                  All {teams.length} clubs · through matchweek {current.matchweek}
+                  All {teams.length} clubs · {season}
+                  {current.matchweek ? ` · through matchweek ${current.matchweek}` : ""}
                 </p>
               </div>
+
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+              <label className="pl-sr-only" htmlFor="race-season">Season</label>
+              <select
+                id="race-season"
+                className="pl-select"
+                value={season || ""}
+                onChange={(e) => setSeason(e.target.value)}
+              >
+                {seasons.map((s) => (
+                  <option key={s.season} value={s.season}>
+                    {s.season}{s.is_current ? " (current)" : ""}
+                  </option>
+                ))}
+              </select>
 
               <div
                 className="pl-seg"
@@ -143,13 +182,14 @@ export default function TitleRace() {
                   </button>
                 ))}
               </div>
+              </div>
             </div>
 
             {hasTrend ? (
               /* Deliberately NOT inside .pl-scroll-x. A ResponsiveContainer
                  measures its parent; give it a minWidth inside an overflow-x:auto
-                 parent and the two feed each other — the container widens, the
-                 parent gains a scrollbar, the observer fires again — which locked
+                 parent and the two feed each other - the container widens, the
+                 parent gains a scrollbar, the observer fires again - which locked
                  the page hard enough that the renderer stopped answering. A line
                  chart reflows on its own and needs no scroll container. */
               <div>
@@ -235,7 +275,7 @@ export default function TitleRace() {
                 {granularity !== "matchweek" && (
                   <p className="pl-caveat">
                     Drawn as steps, not slopes. A title probability does not drift
-                    with the clock — it moves when matches are played and holds
+                    with the clock - it moves when matches are played and holds
                     still in between, so each point sits at the moment its
                     matchweek's last match finished. A sloping line would claim the
                     odds were changing on the Tuesday, and re-simulating hourly to
@@ -247,7 +287,7 @@ export default function TitleRace() {
               /* One stored snapshot is a point, not a trend. */
               <EmptyState
                 title="Only one matchweek stored so far"
-                detail="The trend appears once a second simulation has been stored — one is written per data refresh."
+                detail="The trend appears once a second simulation has been stored - one is written per data refresh."
               />
             )}
 
@@ -257,7 +297,7 @@ export default function TitleRace() {
               <p className="pl-caveat">
                 The shaded span is reconstruction, not record. Those points were
                 computed by today's model working back from the table as it stood
-                at the time — and today's model has been trained on the matches it
+                at the time - and today's model has been trained on the matches it
                 is being asked to simulate. They answer "what would we say now
                 about week 3", which is a different question from "what did we say
                 in week 3". Everything after the shading is what the model actually
@@ -275,7 +315,7 @@ export default function TitleRace() {
               site uses, then played out as independent draws from its goal rates.
               Real seasons are not independent: injuries persist, a club with
               nothing to play for in May is not the club that played in March, and
-              managers change. Rates are also held fixed — the model does not learn
+              managers change. Rates are also held fixed - the model does not learn
               anything inside a simulated season. So these are the probabilities
               implied by today's model under independence, which is a narrower
               claim than "the probability this club wins the league".

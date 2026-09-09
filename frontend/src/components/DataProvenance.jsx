@@ -79,7 +79,7 @@ export default function DataProvenance() {
       <div style={{ display: "flex", gap: 28, flexWrap: "wrap", margin: "16px 0 4px" }}>
         <Metric
           label="Season"
-          value={freshness?.current_season || "—"}
+          value={freshness?.current_season || "-"}
           detail={`${freshness?.matches_played ?? 0} matches recorded`}
         />
         <Metric

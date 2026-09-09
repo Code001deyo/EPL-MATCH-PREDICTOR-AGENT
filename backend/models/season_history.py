@@ -86,6 +86,7 @@ def matchweek_ended_at(db, season: str) -> dict[int, str]:
     from datetime import datetime, timedelta, timezone
 
     ends: dict[int, str] = {}
+
     rows = (
         db.query(Fixture.matchweek, Fixture.kickoff_utc)
         .filter(Fixture.season == season, Fixture.kickoff_utc.isnot(None))
@@ -101,6 +102,42 @@ def matchweek_ended_at(db, season: str) -> dict[int, str]:
         finished = (dt + timedelta(minutes=MATCH_MINUTES)).isoformat()
         if matchweek not in ends or finished > ends[matchweek]:
             ends[matchweek] = finished
+
+    # Past seasons have no rows in `fixtures` - that table tracks the schedule
+    # still to come - so their timestamps come from the results instead.
+    # `match_results.date` is a date with no time, so the end of a matchweek is
+    # taken as 19:00 UTC on the day of its last match. That is an approximation
+    # and is only ever used to place a point on a time axis: the day is exact,
+    # the hour is not, and nothing reads these to the minute.
+    #
+    # Without this, every reconstructed point of a past season carried the moment
+    # the backfill ran, so the whole season collapsed onto a single day and the
+    # weekly and monthly views showed one bar.
+    played = (
+        db.query(MatchResult.matchweek, MatchResult.date)
+        .filter(MatchResult.season == season,
+                MatchResult.division == "E0",
+                MatchResult.date.isnot(None))
+        .all()
+    )
+    # Which weeks the schedule already answered for, captured before the loop:
+    # testing `matchweek in ends` inside it would skip every match after the
+    # first one of a week, and the point of the loop is to find the *last*.
+    from_schedule = set(ends)
+    for matchweek, date_str in played:
+        if matchweek in from_schedule or not date_str:
+            continue
+        try:
+            day = datetime.strptime(str(date_str)[:10], "%Y-%m-%d").replace(
+                hour=19, tzinfo=timezone.utc
+            )
+        except ValueError:
+            continue
+        stamp = day.isoformat()
+        current = ends.get(matchweek)
+        if current is None or stamp > current:
+            ends[matchweek] = stamp
+
     return ends
 
 

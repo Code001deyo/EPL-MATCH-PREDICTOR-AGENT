@@ -26,7 +26,7 @@ export default function AdminLogin() {
       await login(username, password);
     } catch (err) {
       const status = err?.response?.status;
-      // 429 is a distinct, actionable state — telling someone "incorrect
+      // 429 is a distinct, actionable state - telling someone "incorrect
       // password" when they are actually rate-limited sends them to reset a
       // password that was never wrong.
       setError(
@@ -107,7 +107,7 @@ function Field({ label, value, onChange, type: inputType = "text", ...rest }) {
 
 /* Request a reset link.
  *
- * The confirmation is deliberately the same whether or not the account exists —
+ * The confirmation is deliberately the same whether or not the account exists -
  * the server answers identically for both, and saying anything more specific here
  * would reintroduce the username oracle the endpoint was written to avoid.
  *
