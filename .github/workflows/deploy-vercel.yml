@@ -1,27 +1,26 @@
-name: Deploy frontend to Vercel
+name: Verify the frontend deployed
 
-# The frontend's deploy path, and the one that reports what happened.
+# Vercel's own git integration builds and deploys this project. This workflow
+# checks that it actually did.
 #
-# Vercel's git integration stopped building this project. Found on 2026-08-29:
-# its most recent production deployment was commit 6342c3d4 from 24 August, ten
-# commits behind main, with no error anywhere in GitHub. The backend's Render
-# integration had stalled the same way a day later, and the repo has no
-# repository webhooks at all - so both hosts had quietly stopped hearing about
-# pushes while both dashboards still described themselves as connected.
+# It used to deploy from CI as well. That path is gone, and the reason is worth
+# recording: the Vercel CLI would not authenticate with a token the REST API
+# accepted for the same project - `whoami` answered "User not found" and every
+# `pull` and `build` died on "Could not retrieve Project Settings". Reconnecting
+# the git integration removed the credential from the loop entirely.
 #
-# Reconnecting the git integration in the Vercel dashboard is the root fix and
-# worth doing. This workflow is the safety net either way: it deploys from CI, so
-# "did the frontend ship?" is a green or red check next to the commit rather than
-# something discovered by noticing a missing page days later.
+# What is kept is the half that earned its place. On 2026-08-29 the git
+# integration silently stopped firing: production sat ten commits behind for five
+# days, every dashboard still described itself as connected, and nothing in
+# GitHub said otherwise. Deploying from CI was only ever the workaround. Noticing
+# was the point.
 #
-# Setup - one secret, in Settings > Secrets and variables > Actions:
+# So this fails a check on the commit when the site does not catch up, which is
+# the signal that was missing - and it needs no token.
 #
-#   VERCEL_TOKEN   https://vercel.com/account/tokens
+# One repository variable:
 #
-# The org and project ids are repository *variables* rather than secrets: they
-# are identifiers, not credentials, and keeping them out of the workflow file
-# means nothing account-identifying is committed. They come from
-# frontend/.vercel/project.json, which is gitignored.
+#   SITE_BASE_URL   https://novapl.vercel.app
 
 on:
   push:
@@ -32,210 +31,50 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-vercel
+  group: verify-vercel
   cancel-in-progress: false
 
 env:
   SITE: ${{ vars.SITE_BASE_URL }}
-  VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
-  VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
 
 jobs:
-  deploy:
+  verify:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - name: Check configuration
-        working-directory: .
-        env:
-          TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          missing=""
-          [ -n "$TOKEN" ] || missing="$missing VERCEL_TOKEN(secret)"
-          [ -n "$VERCEL_ORG_ID" ] || missing="$missing VERCEL_ORG_ID(variable)"
-          [ -n "$VERCEL_PROJECT_ID" ] || missing="$missing VERCEL_PROJECT_ID(variable)"
-          [ -n "$SITE" ] || missing="$missing SITE_BASE_URL(variable)"
-          if [ -n "$missing" ]; then
-            echo "::error::Not configured:$missing"
-            echo "Create a token at https://vercel.com/account/tokens"
-            echo "The ids are in frontend/.vercel/project.json after 'vercel link'."
-            exit 1
-          fi
+          test -n "$SITE" || { echo "::error::repository variable SITE_BASE_URL is not set"; exit 1; }
 
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Report what Vercel last deployed
-        # Printed before deploying anything. When the git integration has stopped
-        # firing, this is the line that says how far behind production is - the
-        # question that took a page going missing to notice.
-        env:
-          TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      - name: Wait for the site to serve this commit
+        # A 200 from any path proves nothing: vercel.json rewrites every non-/api
+        # path to index.html, so an unknown route returns the app shell with a 200
+        # whether the page exists or not. That is exactly how a missing page went
+        # unnoticed. The build-commit meta tag is compared instead - CRA inlines
+        # it at build time, so it can only be right if this commit is the one that
+        # was built.
         run: |
           set -euo pipefail
-          # The response body is captured to a file, so `--fail-with-body` has
-          # nothing to print: a 403 surfaced as "curl: (22) ... error: 403" with
-          # no reason attached. Check the status and print the body, which names
-          # which permission is missing.
-          code=$(curl -sS -o deployments.json -w '%{http_code}' --max-time 60             -H "Authorization: Bearer $TOKEN"             "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_ORG_ID}&limit=5&target=production")
-
-          if [ "$code" != "200" ]; then
-            echo "::error::listing deployments failed with HTTP $code"
-            jq -r '.error.message // .' deployments.json 2>/dev/null || cat deployments.json
-            exit 1
-          fi
-
-          echo "Five most recent production deployments:"
-          jq -r '.deployments[] | "  \(.created / 1000 | todate)  \(.state)  \(.meta.githubCommitSha[0:8] // "-")  \(.meta.githubCommitMessage // "" | split("\n")[0])"' deployments.json
-
-      - name: Check the token can reach this project
-        # `vercel pull` fails with "Could not retrieve Project Settings" whether
-        # the token is invalid, scoped to the wrong team, or simply lacks access
-        # to this project. Three different fixes behind one message, so ask the
-        # API directly and say which it is.
-        env:
-          TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          set -euo pipefail
-          code=$(curl -sS -o project.json -w '%{http_code}' --max-time 60             -H "Authorization: Bearer $TOKEN"             "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_ORG_ID}")
-
-          if [ "$code" = "200" ]; then
-            echo "token can read $(jq -r '.name' project.json) (${VERCEL_PROJECT_ID})"
-            # The CLI wants a team *slug*, not the team id the API takes, and
-            # gives the same unhelpful "Could not retrieve Project Settings" when
-            # it does not have one. Resolve it here rather than hardcoding it.
-            slug=$(curl -sS --max-time 60               -H "Authorization: Bearer $TOKEN"               "https://api.vercel.com/v2/teams/${VERCEL_ORG_ID}" | jq -r '.slug // empty')
-            if [ -n "$slug" ]; then
-              echo "team slug: $slug"
-              echo "VERCEL_SCOPE=$slug" >> "$GITHUB_ENV"
-            fi
-            exit 0
-          fi
-
-          echo "::error::the VERCEL_TOKEN cannot read project ${VERCEL_PROJECT_ID} (HTTP $code)"
-          # The body names the reason; it contains no credential.
-          jq -r '.error.message // .' project.json 2>/dev/null || cat project.json
-          echo "The token must be created under the team that owns the project"
-          echo "(${VERCEL_ORG_ID}), not a personal scope, at https://vercel.com/account/tokens"
-          exit 1
-
-      - name: Check the CLI can authenticate
-        # Separate from the REST check above, because the two genuinely disagree:
-        # a stale token was accepted by /v9/projects/{id} with HTTP 200 and
-        # rejected by the CLI with "User not found". Without this step that
-        # surfaced three steps later as "Could not retrieve Project Settings",
-        # which reads like a project-linking problem and sent two attempted fixes
-        # down the wrong path.
-        env:
-          TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          set -euo pipefail
-          if npx --yes vercel@latest whoami --token "$TOKEN" > who.txt 2>&1; then
-            echo "CLI authenticated as $(tail -1 who.txt)"
-            exit 0
-          fi
-
-          # A warning, not a failure. `whoami` asks "which user is this token",
-          # and a token issued to a team rather than a person has no answer to
-          # that while still being able to build and deploy. Blocking here would
-          # reject a working token on the strength of a diagnostic.
-          #
-          # The steps that follow are the ones that matter, and they fail loudly
-          # enough on their own.
-          echo "::warning::vercel whoami did not identify a user for this token"
-          tail -3 who.txt
-          echo "Continuing: whoami is diagnostic, and the build and deploy steps"
-          echo "below are the real test of whether the token works."
-
-      - name: Install
-        run: npm ci
-
-      - name: Build
-        env:
-          # Stamped into the bundle so the deploy can be verified rather than
-          # assumed - see the meta tag in public/index.html. CRA inlines
-          # REACT_APP_* at build time, which is why this is set here and not at
-          # deploy time.
-          REACT_APP_COMMIT: ${{ github.sha }}
-          # Matches vercel.json, so a CI build and a dashboard build produce the
-          # same bundle rather than differing in source maps alone.
-          GENERATE_SOURCEMAP: "false"
-          CI: "true"
-          TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          set -euo pipefail
-          # `vercel build`, not `npm run build`.
-          #
-          # This used to run npm and then hand the resulting `build/` folder to
-          # `vercel deploy build`. That does not do what it reads like: Vercel
-          # treats the uploaded folder as the project root and runs the project's
-          # own buildCommand from vercel.json inside it. A CRA output directory
-          # has no package.json, so every deploy died with
-          # `Command "npm run build" exited with 254`.
-          #
-          # `vercel build` runs that same buildCommand here and writes
-          # .vercel/output, which `--prebuilt` below uploads as finished work. The
-          # intent the old comment claimed is now actually true: the artifact that
-          # ships is the one produced in this job.
-          # Write the project link rather than relying on VERCEL_ORG_ID and
-          # VERCEL_PROJECT_ID being picked up from the environment.
-          #
-          # They were both set and exported, and the previous step proved the
-          # token can read this exact project over the REST API - and `vercel
-          # pull` still failed with "Could not retrieve Project Settings". The
-          # CLI wants the link on disk. Locally this file exists because someone
-          # ran `vercel link` once; .vercel/ is gitignored, so CI never has it.
-          mkdir -p .vercel
-          jq -nc --arg p "$VERCEL_PROJECT_ID" --arg o "$VERCEL_ORG_ID" \
-            '{projectId: $p, orgId: $o}' > .vercel/project.json
-
-          scope=""
-          [ -n "${VERCEL_SCOPE:-}" ] && scope="--scope ${VERCEL_SCOPE}"
-
-          npx --yes vercel@latest pull --yes --environment=production $scope --token "$TOKEN"
-          npx --yes vercel@latest build --prod $scope --token "$TOKEN"
-
-      - name: Deploy
-        env:
-          TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          set -euo pipefail
-          # --prebuilt uploads .vercel/output as-is. Nothing is rebuilt remotely,
-          # so the bundle carrying this commit's REACT_APP_COMMIT is the bundle
-          # that goes live, which is what the verify step below then checks.
-          npx --yes vercel@latest deploy --prebuilt \
-            --prod --yes --token "$TOKEN" \
-            --archive=tgz > url.txt
-          echo "Deployed: $(cat url.txt)"
-
-      - name: Verify the site is serving this commit
-        # The step that would have caught a ten-commit-old frontend immediately.
-        #
-        # A 200 from /explainer proves nothing: vercel.json rewrites every
-        # non-/api path to index.html, so an unknown route returns the app shell
-        # with a 200 whether the page exists or not. That is exactly why a missing
-        # page went unnoticed. The meta tag is compared instead.
-        working-directory: .
-        run: |
-          set -euo pipefail
-          for i in $(seq 1 20); do
+          # Vercel builds this project in about 30 seconds, but a queue is normal,
+          # so allow ten minutes before calling it stuck.
+          live=""
+          for i in $(seq 1 40); do
             live=$(curl -sS --max-time 30 "${SITE}/" \
                    | grep -oE '<meta name="build-commit" content="[^"]*"' \
                    | sed -E 's/.*content="([^"]*)".*/\1/' || true)
-            echo "[$i] serving commit: ${live:-<none>}"
+            echo "[$i] serving: ${live:-<none>}"
             if [ "$live" = "${GITHUB_SHA}" ]; then
-              echo "Verified: ${SITE} is serving ${GITHUB_SHA:0:8}."
+              echo "Verified: ${SITE} is serving ${GITHUB_SHA:0:8}"
               exit 0
             fi
             sleep 15
           done
-          echo "::error::${SITE} is not serving ${GITHUB_SHA:0:8} five minutes after deploying."
-          echo "::error::If the tag is empty the live build pre-dates this check; re-run once."
+
+          echo "::error::${SITE} is still not serving ${GITHUB_SHA:0:8} after ten minutes"
+          echo "Last seen: ${live:-<no build-commit tag>}"
+          echo
+          echo "The git integration has probably stopped firing again. Check"
+          echo "Project > Settings > Git in the Vercel dashboard. To ship in the"
+          echo "meantime, from a logged-in CLI:"
+          echo "  cd frontend"
+          echo "  vercel deploy --prod --build-env REACT_APP_COMMIT=\$(git rev-parse HEAD)"
           exit 1
