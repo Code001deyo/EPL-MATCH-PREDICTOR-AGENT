@@ -119,20 +119,33 @@ jobs:
           exit 1
 
       - name: Check the CLI can authenticate
-        # Separate from the REST check above, because they can disagree. A
-        # project-scoped token (vcp_ prefix) authenticates against the REST API
-        # for that project and still cannot drive the CLI, which needs an account
-        # token. Both produce "Could not retrieve Project Settings" further down,
-        # so ask the question directly.
+        # Separate from the REST check above, because the two genuinely disagree.
+        # Measured on 2026-09-09: a project-scoped token was accepted by
+        # /v9/projects/{id} with HTTP 200 and rejected by the CLI with "User not
+        # found". Without this step that surfaced three steps later as "Could not
+        # retrieve Project Settings", which reads like a linking problem and sent
+        # two fixes down the wrong path.
         env:
           TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          set +e
-          echo "whoami:"
-          npx --yes vercel@latest whoami --token "$TOKEN" 2>&1 | tail -3
-          echo "teams:"
-          npx --yes vercel@latest teams ls --token "$TOKEN" 2>&1 | tail -5
-          exit 0
+          set -euo pipefail
+          if npx --yes vercel@latest whoami --token "$TOKEN" > who.txt 2>&1; then
+            echo "CLI authenticated as $(tail -1 who.txt)"
+            exit 0
+          fi
+
+          echo "::error::VERCEL_TOKEN is not an account token, so the CLI cannot use it"
+          tail -3 who.txt
+          echo
+          echo "Measured: the REST API accepted this token for the project, and the"
+          echo "CLI answered 'User not found' / 'token is not valid'. That is the"
+          echo "signature of a project-scoped token (vcp_ prefix): it is scoped to"
+          echo "one project's API, and the CLI needs an account-level token."
+          echo
+          echo "Create one at https://vercel.com/account/tokens - the 'Create Token'"
+          echo "form under Account Settings, not a token created from inside a"
+          echo "project - then: gh secret set VERCEL_TOKEN"
+          exit 1
 
       - name: Install
         run: npm ci
