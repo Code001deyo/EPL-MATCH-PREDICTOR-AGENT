@@ -276,3 +276,90 @@ locally. Regenerated with `npx npm@10` and verified the way CI runs it: only
 
 Passing locally with the wrong npm proved nothing, which is why the first two
 fixes were guesses.
+
+---
+
+## Deployment (2026-09-09) — role: deployment engineer
+
+### Pre-release baseline
+
+Captured before anything moved, because a diff against a capture taken afterwards
+proves nothing:
+
+| | Before | After |
+|---|---|---|
+| Backend `/health` commit | `8599536` | `faff52b9` |
+| Frontend `build-commit` | `e4172507` | `e4172507` — **not deployed** |
+| `/race/current` | 404 | 200 |
+| `/subscribe/status` | 404 | 200 |
+
+Note the backend was **four commits behind `main` before this release**, which is
+the auto-deploy problem this project already knows about. The deploy moved those
+four along with the new work.
+
+### What shipped
+
+- Merged PR #1 as `faff52b9`, all four CI gates green.
+- `deploy-render.yml` ran from CI and verified the running code is the commit —
+  `/health` reports `faff52b9`. Not inferred from latency: the free instance
+  varies 1.5–12s on an unchanged endpoint, which is a wider swing than most
+  changes being checked.
+- Notification dispatch smoke-tested against production:
+  `pre sent=0 post sent=0 errors=0`. Nothing was due — the next fixture is
+  12 September — and there are no subscribers, so this proves the pipeline runs
+  and sends nothing it should not.
+
+### Two corrections to what was assumed before the deploy
+
+**`RESEND_API_KEY` is already set on Render.** `/subscribe/status` reports
+`delivery_configured: true`, so the subscribe box will be *open* in production
+rather than closed. Sign-ups will be accepted and a confirmation email attempted.
+Whether it arrives depends on the sending domain being verified with Resend,
+which has not been proved — no message has been sent to a real address.
+
+**The season simulation ran on boot.** `/race/current` was already answering with
+a live matchweek-3 simulation before anything was triggered by hand.
+
+### Blocked: the frontend is not deployed
+
+`deploy-vercel.yml` fails at its configuration check:
+
+```
+##[error]Not configured: VERCEL_TOKEN(secret)
+```
+
+`gh secret list` confirms only `ADMIN_API_KEY` and `RENDER_API_KEY` exist, and
+Vercel's own Git integration did not deploy either push. **Production still
+serves `e4172507`**, so the title race page, the subscribe module and the
+responsive fixes are live in the API but not visible on the site.
+
+This needs a credential that must not pass through here. The repository owner
+should create a token at <https://vercel.com/account/tokens> and set it:
+
+```
+gh secret set VERCEL_TOKEN
+gh workflow run deploy-vercel.yml --ref main
+```
+
+Everything else is ready; this is the only step remaining.
+
+### Cost control applied during the deploy
+
+The notification cron as merged polled every five minutes round the clock. Each
+run wakes the Render instance and a wake resets its 15-minute idle timer, so the
+instance would never sleep: **720 instance-hours a month against a 750-hour free
+allowance** — 96%, with no headroom and no warning before it ran out. Narrowed to
+match hours (Sat/Sun 11:00–23:59, weekdays 17:00–23:59 UTC), about 260 hours a
+month. A fixture outside those windows gets no email; that gap is deliberate and
+costs less than the alternative.
+
+### Post-deploy gates
+
+- [x] `/health` reports the pushed commit
+- [x] New endpoints answer 200
+- [x] Notification dispatch runs clean against production
+- [ ] Retrain — triggered, `retrain-model.yml` run 34324824889
+- [ ] Frontend deployed — **blocked on `VERCEL_TOKEN`**
+- [ ] Deployed pages diffed against the pre-release capture — cannot complete
+      until the frontend deploys
+- [ ] `npm run qa:responsive https://novapl.vercel.app` — same
