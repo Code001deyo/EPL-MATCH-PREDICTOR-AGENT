@@ -499,3 +499,90 @@ in its picker while local had three.
   1920px on both). The earlier 4,554 was the pre-table layout; the table is
   denser, not missing anything.
 - Zero em dashes in the deployed JavaScript bundle.
+
+---
+
+## Privacy, copyright, smooth curves, automatic retraining (2026-09-09)
+
+### Privacy policy
+
+`/privacy`, written from what the code does rather than from a template. Every
+claim is checkable against `db/subscribers.py` (what is stored), `mailer.py`
+(where it goes) and `routers/subscribe.py` (how it is collected). A policy that
+describes a different system from the one running is worse than none, because it
+is a promise nobody is keeping.
+
+It is specific about the awkward part: unsubscribing marks the row rather than
+deleting it, so a later import cannot quietly re-add someone. Erasure is offered
+on request. Linked from the sidebar, from the subscribe box where consent is
+actually given, and from every email footer.
+
+Email footers now carry sender, unsubscribe and policy. Missing any of the three
+reads as spam to a filter and to a person. The confirmation email has its own
+footer with no unsubscribe link, because there is nothing to leave until an
+address confirms.
+
+### Copyright
+
+`COPYRIGHT.md` plus a footer notice, separating the two things that get
+conflated. The software, model and interface belong to Hanova Technologies; the
+match data does not and is not claimed, with sources and terms listed. Club
+crests are shown from the Premier League CDN and remain the clubs' trade marks:
+no licence has been granted, which is a different position from being licensed
+and matters if this is run commercially. The drawn fallback badges stay in the
+tree so that is a one-component change.
+
+### Smooth curves
+
+Monotone at every resolution and dots off, matching the accuracy and scoring
+trends elsewhere on the site. The steps caveat would then have been describing
+something no longer on screen, so it says what is true instead: each point sits
+at the moment its matchweek finished, and the curve between two points is drawn
+for readability rather than as a claim about the days in between.
+
+### Retraining without an operator
+
+Retraining was something someone remembered to do, so the model sat on old data
+for as long as nobody thought about it and nothing on the site said so.
+
+`models/training_state.py` records the matchweek a model was trained through.
+`POST /model/retrain-if-stale` decides; the schedule stays ignorant of
+matchweeks, the same split the notification cron uses. It answers 200 and does
+nothing when the model is current, because retraining an unchanged model spends
+ten minutes of a 0.1 vCPU instance producing identical estimators.
+
+A matchweek counts as complete at 8 of 10 fixtures played. Not 10: one
+postponement would otherwise hold the watermark back for a week, and the nine
+that were played are real evidence.
+
+On success the operator is emailed the figures rather than "retrain complete". A
+notice with no numbers in it teaches the reader to stop opening it, and the point
+is that a bad retrain should be noticeable.
+
+The watermark lives beside the model files, so a deploy restoring the baked seed
+models clears it. That is correct rather than a bug: after a deploy the running
+model is the older one and does need retraining. Asserted, along with a watermark
+from last season not vouching for this one, which would otherwise suppress
+retraining for an entire campaign.
+
+### Verified in production
+
+```
+before   trained_through_matchweek: null   stale: true
+run 1    retrained
+after    trained_through_matchweek: 3      behind_by: 0   stale: false
+run 2    {"status":"up-to-date"} - did nothing
+```
+
+Both halves proved live: it fires when it should and stays quiet when it should
+not. Frontend and backend both on `a1dee553`, confirmed by commit. 253 backend
+tests, 15 frontend, 18/18 viewports against production, `/privacy` serving 200.
+
+### Still outstanding
+
+- `VERCEL_TOKEN` is still not a repository secret, so the frontend ships only
+  from a logged-in CLI.
+- `ADMIN_EMAIL` (or `RESET_EMAIL_TO`) is not set on Render, so the retrain notice
+  logs loudly instead of sending. The retrain itself is unaffected.
+- No subscriber email has been proved to arrive; the sending domain is unverified
+  in practice.
