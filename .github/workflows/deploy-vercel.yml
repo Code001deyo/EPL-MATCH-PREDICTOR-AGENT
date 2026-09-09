@@ -80,10 +80,18 @@ jobs:
           TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           set -euo pipefail
-          curl -sS --fail-with-body \
-            -H "Authorization: Bearer $TOKEN" \
-            "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_ORG_ID}&limit=5&target=production" \
-            > deployments.json
+          # The response body is captured to a file, so `--fail-with-body` has
+          # nothing to print: a 403 surfaced as "curl: (22) ... error: 403" with
+          # no reason attached. Check the status and print the body, which names
+          # which permission is missing.
+          code=$(curl -sS -o deployments.json -w '%{http_code}' --max-time 60             -H "Authorization: Bearer $TOKEN"             "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_ORG_ID}&limit=5&target=production")
+
+          if [ "$code" != "200" ]; then
+            echo "::error::listing deployments failed with HTTP $code"
+            jq -r '.error.message // .' deployments.json 2>/dev/null || cat deployments.json
+            exit 1
+          fi
+
           echo "Five most recent production deployments:"
           jq -r '.deployments[] | "  \(.created / 1000 | todate)  \(.state)  \(.meta.githubCommitSha[0:8] // "-")  \(.meta.githubCommitMessage // "" | split("\n")[0])"' deployments.json
 
