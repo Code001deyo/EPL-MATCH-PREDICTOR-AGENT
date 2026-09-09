@@ -369,3 +369,43 @@ def test_the_dispatcher_still_retries_when_a_send_is_refused(db, monkeypatch):
         "a refused send must be retried, not recorded as delivered"
     )
     assert outbox == ["fan@example.com"]
+
+
+# --- the confirmation link must be one we chose -------------------------
+
+def test_the_confirm_link_ignores_the_callers_origin(monkeypatch):
+    """A link we email has to be a link we chose.
+
+    This read `request.headers["origin"]`. POST /subscribe with somebody else's
+    address and `Origin: https://evil.example` and the service would mail *them*
+    a link to the attacker's site carrying a valid confirm token - handing over
+    the one credential that activates their subscription.
+    """
+    import os
+    from fastapi.testclient import TestClient
+
+    import mailer
+    from db.database import init_db
+    from main import app
+
+    init_db()
+    monkeypatch.setenv("PUBLIC_SITE_URL", "https://novapl.vercel.app")
+
+    sent = {}
+    monkeypatch.setattr(
+        mailer, "send",
+        lambda to, subject, text, **kw: sent.update(to=to, text=text) or mailer.SendResult(True),
+    )
+
+    client = TestClient(app)
+    client.post(
+        "/subscribe",
+        json={"email": "origin-test@example.com"},
+        headers={"Origin": "https://evil.example"},
+    )
+
+    assert sent, "the confirmation email was not sent"
+    assert "evil.example" not in sent["text"], (
+        "the confirmation link pointed at a host supplied by the caller"
+    )
+    assert "https://novapl.vercel.app/api/subscribe/confirm" in sent["text"]

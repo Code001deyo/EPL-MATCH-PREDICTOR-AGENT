@@ -15,6 +15,7 @@ repeatedly.
 
 from __future__ import annotations
 
+import os
 import re
 
 from fastapi import APIRouter, Depends, Request, Response
@@ -93,7 +94,19 @@ def subscribe(payload: dict, request: Request, db: Session = Depends(get_db)):
         from mailer import send
         from notify import templates
 
-        base = (request.headers.get("origin") or "").rstrip("/")
+        # Built from PUBLIC_SITE_URL, never from the request.
+        #
+        # This used to read the caller's `Origin` header. That is an account
+        # takeover waiting to happen: POST /subscribe with somebody else's
+        # address and `Origin: https://evil.example`, and this service mails
+        # *them* a link to the attacker's site carrying a valid confirm token.
+        # A link we send has to be a link we chose.
+        #
+        # It also fixes the ordinary case. Any client that sends no Origin - curl,
+        # a mail client preview, a browser that strips it - produced
+        # "/api/subscribe/confirm?token=..." with no host, which is a dead link in
+        # the one message that has to work.
+        base = (os.environ.get("PUBLIC_SITE_URL") or "").rstrip("/")
         confirm_url = f"{base}/api/subscribe/confirm?token={row.confirm_token}"
         subject, body = templates.confirm_subscription(confirm_url)
         # If this fails, mailer logs loudly. The caller still gets the generic
