@@ -52,7 +52,7 @@ export default function Predict() {
             {[["upcoming", "Upcoming"], ["played", "Played"]].map(([k, l]) => (
               <button key={k} onClick={() => { setMode(k); setResult(null); }}
                 style={{ flex: 1, padding: "9px 0", borderRadius: radius.sm, border: `1px solid ${mode === k ? C.blue : C.slate200}`,
-                  background: mode === k ? C.blue : C.white, color: mode === k ? C.white : C.slate600,
+                  background: mode === k ? C.blue : C.white, color: mode === k ? C.navy : C.slate600,
                   fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
                 {l}
               </button>
@@ -65,7 +65,7 @@ export default function Predict() {
 
         <div>
           {result ? <PredictionResult result={result} /> : (
-            <Card style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 300, color: C.slate300 }}>
+            <Card style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 300, color: C.slate500 }}>
               <div style={{ fontSize: 15, fontWeight: 500 }}>Select a fixture and click Predict</div>
             </Card>
           )}
@@ -153,16 +153,16 @@ function PredictionResult({ result }) {
       <Card>
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <div style={{ fontSize: 12, color: C.slate400, marginBottom: 4 }}>{result.fixture} · MW{result.matchweek} · {result.season}</div>
-          {result.date && <div style={{ fontSize: 11, color: C.slate300 }}>{result.date}</div>}
+          {result.date && <div style={{ fontSize: 11, color: C.slate500 }}>{result.date}</div>}
         </div>
 
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 32, marginBottom: 16 }}>
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 11, color: C.slate400, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>{homeTeam}</div>
-            <div style={{ fontSize: 56, fontWeight: 800, color: C.blue, lineHeight: 1 }}>{result.home_goals}</div>
+            <div style={{ fontSize: 56, fontWeight: 800, color: C.blueText, lineHeight: 1 }}>{result.home_goals}</div>
             <div style={{ fontSize: 11, color: C.slate400, marginTop: 4 }}>Predicted</div>
           </div>
-          <div style={{ fontSize: 28, color: C.slate300, fontWeight: 300 }}>-</div>
+          <div style={{ fontSize: 28, color: C.slate500, fontWeight: 300 }}>-</div>
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 11, color: C.slate400, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>{awayTeam}</div>
             <div style={{ fontSize: 56, fontWeight: 800, color: C.rose, lineHeight: 1 }}>{result.away_goals}</div>
@@ -205,7 +205,7 @@ function PredictionResult({ result }) {
         <Card>
           <div style={{ fontSize: 15, fontWeight: 700, color: C.slate800, marginBottom: 4 }}>Predicted Match Stats</div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 700, color: C.slate400, marginBottom: 16, textTransform: "uppercase" }}>
-            <span style={{ color: C.blue }}>{homeTeam}</span>
+            <span style={{ color: C.blueText }}>{homeTeam}</span>
             <span>Stat</span>
             <span style={{ color: C.rose }}>{awayTeam}</span>
           </div>

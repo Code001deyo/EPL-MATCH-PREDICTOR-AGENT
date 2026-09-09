@@ -87,11 +87,11 @@ export default function ModelPage() {
       </SectionTitle>
 
       <div style={{ display: "flex", gap: space.lg, marginBottom: space.xl, flexWrap: "wrap" }}>
-        <KpiCard label="Total Predictions" value={live.total_predictions ?? "-"} color={C.blue} />
+        <KpiCard label="Total Predictions" value={live.total_predictions ?? "-"} color={C.blueText} />
         <KpiCard label="Evaluated" value={evaluated || "-"} sub="with actual results" color={C.slate600} />
         <KpiCard label="Result Accuracy" value={evaluated ? `${(live.correct_result_accuracy * 100).toFixed(0)}%` : "not measured"} color={C.emerald} />
         <KpiCard label="Exact Score %" value={evaluated ? `${(live.exact_score_accuracy * 100).toFixed(0)}%` : "not measured"} color={C.amber} />
-        <KpiCard label="Avg Confidence" value={live.avg_confidence ? `${(live.avg_confidence * 100).toFixed(0)}%` : "not measured"} color={C.blue} />
+        <KpiCard label="Avg Confidence" value={live.avg_confidence ? `${(live.avg_confidence * 100).toFixed(0)}%` : "not measured"} color={C.blueText} />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "1fr 1fr", gap: space.xl, marginBottom: space.xl }}>

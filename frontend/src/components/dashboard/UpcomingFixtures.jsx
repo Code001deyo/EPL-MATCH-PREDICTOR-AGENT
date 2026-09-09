@@ -105,7 +105,7 @@ export default function UpcomingFixtures() {
           </div>
 
           <div style={{ marginTop: space.md, ...type.label }}>
-            <Link to="/predict" style={{ color: C.blueDark, textDecoration: "none" }}>
+            <Link to="/predict" style={{ color: C.blueText, textDecoration: "none" }}>
               Predict a fixture →
             </Link>
           </div>

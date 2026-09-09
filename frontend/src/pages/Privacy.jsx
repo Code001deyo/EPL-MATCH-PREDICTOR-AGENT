@@ -156,4 +156,4 @@ function Section({ title, children }) {
 
 const p = { margin: "0 0 10px", fontSize: 13, lineHeight: 1.7, color: C.slate600, maxWidth: "68ch" };
 const list = { margin: "0 0 10px", paddingLeft: 18, fontSize: 13, lineHeight: 1.8, color: C.slate600, maxWidth: "68ch" };
-const link = { color: C.blueDark, fontWeight: 600 };
+const link = { color: C.blueText, fontWeight: 600 };

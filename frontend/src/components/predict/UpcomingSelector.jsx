@@ -97,7 +97,7 @@ export default function UpcomingSelector({ onResult }) {
 
       {selectedFixture && (
         <div style={{ padding: "10px 14px", background: C.slate50, borderRadius: radius.sm, marginBottom: 14, fontSize: 12, color: C.slate500 }}>
-          {selectedFixture.kickoff} · <span style={{ color: C.blueDark, fontWeight: 600 }}>Upcoming</span>
+          {selectedFixture.kickoff} · <span style={{ color: C.blueText, fontWeight: 600 }}>Upcoming</span>
           {season && <span style={{ color: C.slate400 }}> · {season}</span>}
         </div>
       )}

@@ -98,5 +98,5 @@ function formatDelta(delta) {
 
 function deltaColour(delta) {
   if (delta == null || Math.abs(delta * 100) < 0.05) return C.slate400;
-  return delta > 0 ? "#2f8f5b" : "#b3123a";
+  return delta > 0 ? C.emerald : C.rose;
 }

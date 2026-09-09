@@ -31,6 +31,7 @@
 const fs = require("fs");
 const path = require("path");
 const puppeteer = require("puppeteer-core");
+const axeSource = require("axe-core").source;
 
 const BASE = process.argv[2] || process.env.SITE_URL || "http://localhost:3000";
 
@@ -98,6 +99,58 @@ const MIN_FONT_PX = 9;
  * with no backend behind it, where an authenticated page cannot be checked and
  * its absence is not a defect.
  */
+/* States a first render does not show.
+ *
+ * The sweep measured every page exactly as it loads. The navigation drawer
+ * overlays content at narrow widths and had never been measured open; a chart
+ * with a different resolution selected redraws its axis; a wide table's scroll
+ * container is only exercised once something scrolls it. Each returns true when
+ * it applied, so a state that does not exist on a page is skipped rather than
+ * counted as checked.
+ */
+const STATES = [
+  {
+    name: "drawer-open",
+    when: (view) => view.width <= 900,
+    apply: async (page) => {
+      const toggle = await page.$('[aria-label="Open navigation"]');
+      if (!toggle) return false;
+      await toggle.click();
+      await new Promise((r) => setTimeout(r, 500));
+      return true;
+    },
+  },
+  {
+    name: "granularity-monthly",
+    when: () => true,
+    apply: async (page) => {
+      const clicked = await page.evaluate(() => {
+        const button = [...document.querySelectorAll(".pl-seg button")]
+          .find((b) => b.textContent.trim() === "Monthly");
+        if (!button) return false;
+        button.click();
+        return true;
+      });
+      if (clicked) await new Promise((r) => setTimeout(r, 900));
+      return clicked;
+    },
+  },
+];
+
+/* Accessibility rules this build fails on.
+ *
+ * Deliberately not the full ruleset. axe reports a great deal that a team has
+ * not agreed to act on, and a check nobody acts on gets switched off - the same
+ * reasoning that shaped the tap-target rule. These four are the ones this
+ * project has already committed to in docs/QA_STANDARDS.md: text has to be
+ * readable, images have to have a name, form controls have to have a label, and
+ * a page needs a heading structure.
+ *
+ * Contrast is run once per page at the widest viewport. It does not vary with
+ * width, and running it eight times per page would multiply the run for nothing.
+ */
+const AXE_RULES = ["color-contrast", "image-alt", "label", "empty-heading"];
+
 const ADMIN_KEY = process.env.ADMIN_API_KEY || "";
 const ADMIN_PAGES = ADMIN_KEY ? [{ name: "console", path: "/secure-model" }] : [];
 
@@ -281,6 +334,62 @@ function audit(minTap, isTouch, minFont) {
           path: path.join(outDir, `${target.name}-${view.name}.png`),
           fullPage: true,
         });
+
+        // Contrast and naming, once per page at the widest viewport.
+        if (view.width === VIEWPORTS[VIEWPORTS.length - 1].width) {
+          try {
+            await page.evaluate(axeSource);
+            const violations = await page.evaluate(async (rules) => {
+              const run = await window.axe.run(document, {
+                runOnly: { type: "rule", values: rules },
+                resultTypes: ["violations"],
+              });
+              return run.violations.map((v) => ({
+                id: v.id,
+                count: v.nodes.length,
+                where: v.nodes.slice(0, 2).map((n) => n.target.join(" ")).join("; "),
+              }));
+            }, AXE_RULES);
+
+            for (const v of violations) {
+              failures.push(
+                `${target.name}: ${v.id} x${v.count} — ${v.where}`
+              );
+            }
+            if (!violations.length) console.log(`  ok    ${target.name} accessibility`);
+          } catch (err) {
+            failures.push(`${target.name}: accessibility scan failed — ${err.message}`);
+          }
+        }
+
+        // The same audit again, after each interaction that applies. A drawer
+        // that overlays the page, or a chart that redraws, can introduce an
+        // overflow the first render never had.
+        for (const state of STATES) {
+          if (!state.when(view)) continue;
+          let applied = false;
+          try {
+            applied = await state.apply(page);
+          } catch {
+            applied = false;
+          }
+          if (!applied) continue;
+
+          checks += 1;
+          const after = await page.evaluate(audit, MIN_TAP, view.touch, MIN_FONT_PX);
+          const stateLabel = `${label} [${state.name}]`;
+
+          if (after.overflow) {
+            failures.push(`${stateLabel}: body scrolls horizontally (${after.scrollWidth} > ${after.innerWidth})`);
+          }
+          if (after.tooWide.length) {
+            failures.push(`${stateLabel}: wider than the viewport — ${after.tooWide.join(", ")}`);
+          }
+          if (after.hiddenControls.length) {
+            failures.push(`${stateLabel}: controls hidden by a layout rule — ${after.hiddenControls.join(", ")}`);
+          }
+          console.log(`  ok    ${stateLabel}`);
+        }
 
         if (result.textLength < 40) {
           failures.push(`${label}: page rendered almost no text (${result.textLength} chars) — likely a component threw`);

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useId} from "react";
 import axios from "axios";
 import Card from "../ui/Card";
 import SectionTitle from "../ui/SectionTitle";
@@ -105,10 +105,15 @@ function Legend({ children }) {
 }
 
 function Field({ label, value, onChange, type: inputType = "text", hint, ...rest }) {
+  // A <label> next to an <input> is not a label for it. Without htmlFor/id the
+  // two are unrelated, so a screen reader announces "password, edit text" with
+  // no clue which of the five on this card it is - and axe reports it, which is
+  // how this was found. useId keeps the pairing unique across instances.
+  const id = useId();
   return (
     <div style={{ marginBottom: space.sm }}>
-      <label style={{ display: "block", ...type.label, color: C.slate600, marginBottom: 3 }}>{label}</label>
-      <input type={inputType} value={value} onChange={(e) => onChange(e.target.value)} style={{
+      <label htmlFor={id} style={{ display: "block", ...type.label, color: C.slate600, marginBottom: 3 }}>{label}</label>
+      <input id={id} type={inputType} value={value} onChange={(e) => onChange(e.target.value)} style={{
         width: "100%", padding: "8px 10px", borderRadius: radius.sm,
         border: `1px solid ${C.slate200}`, fontSize: 13, boxSizing: "border-box",
       }} {...rest} />

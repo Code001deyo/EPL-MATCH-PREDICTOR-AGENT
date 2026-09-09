@@ -70,7 +70,7 @@ export default function Analytics() {
 
       {/* League KPIs */}
       <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
-        <KpiCard label="Avg Goals / Game" value={league?.avg_goals_per_game ?? "-"} color={C.blue} />
+        <KpiCard label="Avg Goals / Game" value={league?.avg_goals_per_game ?? "-"} color={C.blueText} />
         <KpiCard label="Home Win Rate" value={league ? `${(league.home_win_rate * 100).toFixed(0)}%` : "-"} color={C.emerald} />
         <KpiCard label="Draw Rate" value={league ? `${(league.draw_rate * 100).toFixed(0)}%` : "-"} color={C.amber} />
         <KpiCard label="Away Win Rate" value={league ? `${(league.away_win_rate * 100).toFixed(0)}%` : "-"} color={C.rose} />
@@ -130,7 +130,7 @@ export default function Analytics() {
             <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
               {[
                 ["Total Meetings", h2h.total_meetings, C.slate600],
-                [`${h2h.home_team} Wins`, h2h.home_wins, C.blue],
+                [`${h2h.home_team} Wins`, h2h.home_wins, C.blueText],
                 ["Draws", h2h.draws, C.amber],
                 [`${h2h.away_team} Wins`, h2h.away_wins, C.rose],
                 ["Avg Goals", h2h.avg_goals, C.emerald],
@@ -156,7 +156,7 @@ export default function Analytics() {
                   <tr key={i} style={{ borderBottom: `1px solid ${C.slate100}` }}>
                     <td style={{ padding: "9px 12px", color: C.slate500 }}>{m.date}</td>
                     <td style={{ padding: "9px 12px", fontWeight: 500, color: C.slate800 }}>{m.home_team}</td>
-                    <td style={{ padding: "9px 12px", fontWeight: 700, color: C.blue }}>{m.score}</td>
+                    <td style={{ padding: "9px 12px", fontWeight: 700, color: C.blueText }}>{m.score}</td>
                     <td style={{ padding: "9px 12px", fontWeight: 500, color: C.slate800 }}>{m.away_team}</td>
                     <td style={{ padding: "9px 12px", color: C.slate400 }}>{m.season}</td>
                   </tr>
@@ -183,7 +183,7 @@ export default function Analytics() {
             <tbody>
               {formTable.map((t, i) => (
                 <tr key={t.team} style={{ borderBottom: `1px solid ${C.slate100}`, background: i < 4 ? "#f0f9ff" : i >= formTable.length - 3 ? "#fff5f5" : "transparent" }}>
-                  <td style={{ padding: "9px 12px", textAlign: "center", fontWeight: 700, color: i < 4 ? C.blue : i >= formTable.length - 3 ? C.rose : C.slate400 }}>{i + 1}</td>
+                  <td style={{ padding: "9px 12px", textAlign: "center", fontWeight: 700, color: i < 4 ? C.blueText : i >= formTable.length - 3 ? C.rose : C.slate400 }}>{i + 1}</td>
                   <td style={{ padding: "9px 12px", fontWeight: 600, color: C.slate800 }}>{t.team}</td>
                   <td style={{ padding: "9px 12px", textAlign: "center", color: C.slate600 }}>{t.played}</td>
                   <td style={{ padding: "9px 12px", textAlign: "center", color: C.emerald, fontWeight: 600 }}>{t.won}</td>
@@ -204,7 +204,7 @@ export default function Analytics() {
           </table>
         </div>
         <div style={{ marginTop: 12, fontSize: 11, color: C.slate400, display: "flex", gap: 16 }}>
-          <span style={{ color: C.blue }}>■ Champions League</span>
+          <span style={{ color: C.blueText }}>■ Champions League</span>
           <span style={{ color: C.rose }}>■ Relegation Zone</span>
         </div>
       </Card>

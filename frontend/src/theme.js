@@ -12,34 +12,57 @@ export const C = {
   navyLight: "#4d0052",   // lighter purple for hover/active states
   blue: "#00ff85",        // PL signature green (primary accent) - BRAND, not semantic
   blueDark: "#00b368",    // darker green for hover - distinct from semantic.good
+  // The brand green as *text*. #00ff85 measures 1.34:1 on white, which is not
+  // readable by anyone; it is a fill colour that had been pressed into service as
+  // type. This is the same hue carried down to 4.5:1 so a figure printed in
+  // "PL green" can actually be read. Never use C.blue for text on white.
+  blueText: "#046c4e",
   // Legacy semantic-ish colours, still used by W/D/L badges elsewhere in the app.
-  emerald: "#00cc6a",     // win / positive
-  amber: "#f59e0b",       // draw / warning
-  rose: "#e8003d",        // loss / negative (PL red)
+  // W/D/L badge colours. Darkened to clear 4.5:1 as text: the originals were
+  // picked as fills and then used as type, where #f59e0b measured 2.14:1 and
+  // #00cc6a little better. The badge backgrounds they sit on are unchanged, so
+  // the chips still read as the same three colours.
+  emerald: "#0c6238",     // win / positive
+  amber: "#a4650f",       // draw / warning
+  rose: "#c11239",        // loss / negative (PL red)
   // Neutral grays
   slate50: "#f8fafc",
   slate100: "#f1f5f9",
   slate200: "#e2e8f0",
   slate300: "#cbd5e1",
-  slate400: "#94a3b8",
-  slate500: "#64748b",
+  // Darkened from #94a3b8, which was 2.56:1 on white against WCAG AA's 4.5:1.
+  // It is the muted-text colour in 57 places - table headers, captions, units -
+  // so it was the single largest source of contrast failures on the site.
+  slate400: "#586274",
+  // #64748b cleared 4.5:1 on white and measured 4.34 on the pale grey chips it
+  // also sits on. A muted colour used on two backgrounds has to satisfy the
+  // darker one, so it is set from that constraint rather than from white.
+  slate500: "#586274",
   slate600: "#475569",
   slate700: "#334155",
   slate800: "#1e293b",
   white: "#ffffff",
+
+  // Muted text on the purple rail.
+  //
+  // The sidebar had been using the same slate tokens as the white pages. Those
+  // are chosen to be readable on white, so on #37003c they are dark-on-dark -
+  // and darkening slate400 to fix the pages made the rail worse. A dark surface
+  // needs its own muted colour, going the other way.
+  onNavyMuted: "#c9b8d0",
 };
 
 // Semantic tokens: judge a number, never decorate a chart with these.
 // Deliberately muted relative to the vivid brand green - a model that beats
 // its baseline by 1.3 points should not flash the same colour as the sidebar.
 export const semantic = {
-  good: "#2f8f5b",
+  good: "#1c6b41",
   goodBg: "#e7f5ee",
   goodBorder: "#bfe3d0",
-  warn: "#a4650f",
+  warn: "#8f5709",
   warnBg: "#fbf1e2",
   warnBorder: "#efd6a8",
-  bad: "#b3123a",
+  bad: "#a81034",
   badBg: "#fbe9ee",
   badBorder: "#f0bfcd",
   neutral: "#64748b",

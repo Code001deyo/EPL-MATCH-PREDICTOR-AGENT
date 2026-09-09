@@ -67,7 +67,9 @@ The floor, not the ambition. All of it is measured by
 | Control tap targets | ≥ 44 × 44 px | Apple HIG and Material both land here; below it a thumb misses |
 | Inline text links | ≥ 24 px | WCAG 2.2 AA (2.5.8) minimum. The standard explicitly exempts inline targets from the larger figure, because enlarging a link inside a sentence breaks the sentence |
 | Keyboard focus | Always visible | `:focus-visible` in `styles/app.css` |
-| Colour is never the only signal | Text equivalent required | Several clubs share a palette; every title-race row carries `.pl-sr-only` prose |
+| Colour is never the only signal | Text equivalent required | Several clubs share a palette |
+| Text contrast | WCAG AA, 4.5:1 | `axe-core` in `qa:responsive`, failing the run |
+| Images and controls are named | `image-alt`, `label` | Same pass |
 | Motion | Honour `prefers-reduced-motion` | CSS media query; **and** JS-driven SVG animation disabled, because CSS cannot reach it |
 
 The tap-target rule deliberately distinguishes controls from inline links. A
@@ -80,7 +82,14 @@ than not checking.
 
 `npm run qa:responsive` — 3 pages × 6 viewports = 18 combinations.
 
-**Widths:** 320, 375, 768, 1024, 1440, 1920.
+**Widths:** 320, 375, 768, 1024, 1280, 1440, 1920, plus 812x375 landscape.
+
+**Pages:** all nine public routes, plus the operator console when `ADMIN_API_KEY`
+is available. It was three pages until 2026-09-10, and "18/18 green" was being
+read as "the site is responsive" when it meant a third of it.
+
+**States:** the navigation drawer open, and a chart with a non-default resolution
+selected. A page's first render is not the page.
 
 **Why headless rather than by hand:** a Chrome window on Windows will not go
 narrower than about 500px, and the development display is 1366 wide. By hand,
@@ -99,6 +108,11 @@ Each combination asserts:
 4. **Tap targets meet section 3.**
 5. **The page rendered text.** A blank body overflows nothing and would otherwise
    pass every check above.
+6. **No control is hidden by a layout rule.** A control that is present but
+   `display:none` is worse than a missing one: the page looks complete and the
+   action is unreachable.
+7. **No text below 9px.** Not 12: the footer's legal line is deliberately 9px at
+   320px, and a rule that has to exempt the thing violating it is not a rule.
 
 Screenshots land in `frontend/screenshots/` (gitignored) for the eye check no
 assertion replaces.
@@ -157,8 +171,6 @@ After a deploy, and before calling it done:
 
 Listed so the gaps are visible rather than assumed covered.
 
-- **No automated colour-contrast check.** Contrast was chosen by hand and has not
-  been measured. An axe-core pass in the responsive checker would close this.
 - **No end-to-end test of email delivery.** The dispatcher is tested against a
   stub mailer. A real message has still not been proved to arrive, but the
   failure is no longer invisible: `POST /notifications/selftest` reports which

@@ -8,7 +8,7 @@ export default function StatBar({ label, home, away, homeTeam, awayTeam, unit = 
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 600, marginBottom: 5, color: C.slate700 }}>
-        <span style={{ color: C.blue }}>{home}{unit}</span>
+        <span style={{ color: C.blueText }}>{home}{unit}</span>
         <span style={{ fontSize: 11, color: C.slate400, fontWeight: 500 }}>{label}</span>
         <span style={{ color: C.rose }}>{away}{unit}</span>
       </div>

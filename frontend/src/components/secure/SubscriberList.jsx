@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import Card from "../ui/Card";
 import SectionTitle from "../ui/SectionTitle";
-import { C, radius, space, type } from "../../theme";
+import { C, radius, semantic, space, type } from "../../theme";
 import { API } from "../../config";
 
 /* Who is on the list, and the two things an operator may do about it.
@@ -157,8 +157,8 @@ export default function SubscriberList() {
 
 function StateBadge({ state }) {
   const palette = {
-    active: { bg: "#e7f5ee", color: "#2f8f5b" },
-    pending: { bg: "#fbf1e2", color: "#a4650f" },
+    active: { bg: "#e7f5ee", color: C.emerald },
+    pending: { bg: "#fbf1e2", color: semantic.warn },
     unsubscribed: { bg: C.slate100, color: C.slate500 },
   }[state] || { bg: C.slate100, color: C.slate500 };
 
@@ -180,7 +180,7 @@ function Action({ label, onClick, busy, danger }) {
       style={{
         marginLeft: 6, padding: "5px 10px", borderRadius: radius.sm,
         border: `1px solid ${danger ? "#f0bfcd" : C.slate200}`,
-        background: C.white, color: danger ? "#b3123a" : C.slate600,
+        background: C.white, color: danger ? C.rose : C.slate600,
         ...type.micro, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
       }}
     >

@@ -49,7 +49,7 @@ export default function History() {
       </div>
 
       <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
-        <KpiCard label="Total Predictions" value={history.length} color={C.blue} />
+        <KpiCard label="Total Predictions" value={history.length} color={C.blueText} />
         <KpiCard label="Result Accuracy" value={evaluated.length ? `${Math.round((correct / evaluated.length) * 100)}%` : "-"} sub={`${correct} / ${evaluated.length} evaluated`} color={C.emerald} />
         <KpiCard label="Exact Score %" value={evaluated.length ? `${Math.round((exact / evaluated.length) * 100)}%` : "-"} sub={`${exact} exact scores`} color={C.amber} />
         <KpiCard label="Pending" value={history.length - evaluated.length} color={C.slate400} />
@@ -110,10 +110,10 @@ export default function History() {
                       <td style={{ padding: "9px 10px", fontWeight: 500, color: C.slate800, whiteSpace: "nowrap" }}>{p.fixture}</td>
                       <td style={{ padding: "9px 10px", color: C.slate500 }}>{p.season}</td>
                       <td style={{ padding: "9px 10px", color: C.slate500 }}>MW{p.matchweek}</td>
-                      <td style={{ padding: "9px 10px", fontWeight: 700, color: C.blue, fontSize: 15 }}>{p.predicted}</td>
+                      <td style={{ padding: "9px 10px", fontWeight: 700, color: C.blueText, fontSize: 15 }}>{p.predicted}</td>
                       <td style={{ padding: "9px 10px", fontWeight: 600, color: C.slate700 }}>{p.actual || "-"}</td>
                       <td style={{ padding: "9px 10px" }}><Badge variant={variant} small /></td>
-                      <td style={{ padding: "9px 10px", color: C.blue }}>{p.home_win_prob ? `${(p.home_win_prob * 100).toFixed(0)}%` : "-"}</td>
+                      <td style={{ padding: "9px 10px", color: C.blueText }}>{p.home_win_prob ? `${(p.home_win_prob * 100).toFixed(0)}%` : "-"}</td>
                       <td style={{ padding: "9px 10px", color: C.amber }}>{p.draw_prob ? `${(p.draw_prob * 100).toFixed(0)}%` : "-"}</td>
                       <td style={{ padding: "9px 10px", color: C.rose }}>{p.away_win_prob ? `${(p.away_win_prob * 100).toFixed(0)}%` : "-"}</td>
                       <td style={{ padding: "9px 10px", color: C.slate500 }}>{p.confidence ? `${(p.confidence * 100).toFixed(0)}%` : "-"}</td>

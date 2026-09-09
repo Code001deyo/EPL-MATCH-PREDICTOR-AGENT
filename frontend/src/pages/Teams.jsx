@@ -64,7 +64,7 @@ export default function Teams() {
             <KpiCard label="Wins" value={wins} color={C.emerald} />
             <KpiCard label="Draws" value={draws} color={C.amber} />
             <KpiCard label="Losses" value={losses} color={C.rose} />
-            <KpiCard label="Avg Scored" value={form.avg_gf_last5} sub="last 5" color={C.blue} />
+            <KpiCard label="Avg Scored" value={form.avg_gf_last5} sub="last 5" color={C.blueText} />
             <KpiCard label="Avg Conceded" value={form.avg_ga_last5} sub="last 5" color={C.rose} />
           </div>
         )}
@@ -74,7 +74,7 @@ export default function Teams() {
         <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
           {[
             ["Form", form.form_string, C.slate700],
-            ["Last 5 Pts", form.last5_pts, C.blue],
+            ["Last 5 Pts", form.last5_pts, C.blueText],
             ["BTTS Rate", `${(form.btts_rate * 100).toFixed(0)}%`, C.amber],
             ["Over 2.5 Rate", `${(form.over_2_5_rate * 100).toFixed(0)}%`, C.emerald],
             ["Clean Sheet Rate", `${(form.clean_sheet_rate * 100).toFixed(0)}%`, C.slate600],
@@ -141,7 +141,7 @@ export default function Teams() {
                     <td style={{ padding: "9px 12px", color: C.slate500 }}>{m.date}</td>
                     <td style={{ padding: "9px 12px", fontWeight: 500, color: C.slate800 }}>{m.opponent}</td>
                     <td style={{ padding: "9px 12px" }}>
-                      <span style={{ background: m.venue === "H" ? "#dbeafe" : "#fce7f3", color: m.venue === "H" ? C.blue : "#9d174d", padding: "2px 8px", borderRadius: 12, fontSize: 11, fontWeight: 600 }}>
+                      <span style={{ background: m.venue === "H" ? "#dbeafe" : "#fce7f3", color: m.venue === "H" ? "#1d4ed8" : "#9d174d", padding: "2px 8px", borderRadius: 12, fontSize: 11, fontWeight: 600 }}>
                         {m.venue === "H" ? "Home" : "Away"}
                       </span>
                     </td>

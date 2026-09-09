@@ -61,7 +61,7 @@ export default function Sidebar() {
       }}>
         <div style={{ padding: "24px 20px 20px", borderBottom: `1px solid ${C.navyLight}` }}>
           <div style={{ fontSize: 20, fontWeight: 700, color: C.white, letterSpacing: "-0.3px" }}>EPL Predictor</div>
-          <div style={{ ...type.micro, fontWeight: 400, color: C.slate400, marginTop: 3 }}>ML-Powered Analytics</div>
+          <div style={{ ...type.micro, fontWeight: 400, color: C.onNavyMuted, marginTop: 3 }}>ML-Powered Analytics</div>
         </div>
         <nav style={{ padding: "12px 10px", flex: 1 }}>
           {NAV.map(({ to, label }) => (
@@ -77,7 +77,7 @@ export default function Sidebar() {
             </NavLink>
           ))}
         </nav>
-        <div style={{ padding: "16px 20px", borderTop: `1px solid ${C.navyLight}`, ...type.micro, fontWeight: 400, color: C.slate500 }}>
+        <div style={{ padding: "16px 20px", borderTop: `1px solid ${C.navyLight}`, ...type.micro, fontWeight: 400, color: C.onNavyMuted }}>
           <div>Data: Premier League API</div>
           {/* rel="noopener noreferrer" is not boilerplate here: target="_blank"
               otherwise hands the opened page a window.opener handle back into

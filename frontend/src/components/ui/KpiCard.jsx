@@ -1,6 +1,6 @@
 import { C, shadow, radius } from "../../theme";
 
-export default function KpiCard({ label, value, sub, color = C.blue }) {
+export default function KpiCard({ label, value, sub, color = C.blueText }) {
   return (
     <div style={{ background: C.white, borderRadius: radius.lg, padding: "20px 24px", boxShadow: shadow.card, flex: 1, minWidth: 160 }}>
       <div style={{ marginBottom: 10 }}>
