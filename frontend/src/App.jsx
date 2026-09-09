@@ -4,7 +4,7 @@ import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import "@fontsource/inter/700.css";
 import { lazy, Suspense } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./pages/Dashboard";
 import Predict from "./pages/Predict";
@@ -71,6 +71,15 @@ function Shell() {
               <Suspense fallback={null}><SecureModel /></Suspense>
             } />
           </Routes>
+
+          {/* One line, and it stays one line. The copyright was in the 220px
+              sidebar and wrapped onto four; here it has the full content width.
+              Below the point where even this cannot hold it, the font shrinks
+              rather than the line breaking - see .pl-footer. */}
+          <footer className="pl-footer">
+            <span>&copy; {new Date().getFullYear()} Hanova Technologies. All rights reserved.</span>
+            <Link to="/privacy" className="pl-footer-link">Privacy</Link>
+          </footer>
         </main>
       </div>
   );

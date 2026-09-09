@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { C, SIDEBAR_W, space, type } from "../theme";
 import { useIsNarrow } from "../hooks/useBreakpoint";
 
@@ -96,24 +96,12 @@ export default function Sidebar() {
             </a>
           </div>
 
-          {/* Ownership of the product, stated separately from the data it uses.
-              The match data is public; the site, the model and this interface are
-              not, and a footer is where a reader looks for that. */}
-          <div style={{ marginTop: 10, lineHeight: 1.6 }}>
-            <div>&copy; {new Date().getFullYear()} Hanova Technologies.</div>
-            <div>All rights reserved.</div>
-          </div>
-
-          <div style={{ marginTop: 8 }}>
-            <Link
-              to="/privacy"
-              style={{ color: C.slate400, textDecoration: "none", fontWeight: 600 }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = C.blue; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = C.slate400; }}
-            >
-              Privacy
-            </Link>
-          </div>
+          {/* The copyright and privacy link used to sit here and wrapped onto
+              four lines. They could not do otherwise: this rail is 220px wide,
+              180px of it usable, and the line needs about 285px at a readable
+              size. They live in the page footer now, which is full width, holds
+              the line without wrapping, and is where a reader looks for a
+              copyright anyway. */}
         </div>
       </aside>
     </>

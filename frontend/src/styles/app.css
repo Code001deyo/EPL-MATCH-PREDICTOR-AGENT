@@ -571,3 +571,51 @@ input:not([type="hidden"]),
   color: var(--slate-500);
   max-width: 70ch;
 }
+
+
+/* --- page footer ---------------------------------------------------------
+ *
+ * One line, never wrapped. The copyright lived in the 220px sidebar and broke
+ * across four lines there, because 180px of usable width cannot hold a
+ * fifty-five character sentence at any readable size.
+ *
+ * `nowrap` alone would just move the problem: on a 320px phone the line would
+ * push the page into a horizontal scroll, which the responsive check fails the
+ * build over and rightly so. So the type size is fluid instead - it shrinks with
+ * the viewport down to 9px, which is enough for a legal line that is read once.
+ */
+.pl-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 2vw, 18px);
+  margin-top: 40px;
+  padding: 16px 0 4px;
+  border-top: 1px solid var(--slate-200);
+  color: var(--slate-500);
+  font-size: clamp(0.5625rem, 0.42rem + 0.55vw, 0.75rem);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.pl-footer-link {
+  color: var(--slate-500);
+  text-decoration: none;
+  font-weight: 700;
+  white-space: nowrap;
+  /* A flex child is not an inline link, so it does not get WCAG 2.5.8's
+     inline exemption and has to clear 24px on its own. At this type size the
+     text box is 17px, so the padding is doing real work rather than decorating. */
+  /* min-height rather than padding: the type size is fluid, so padding that
+     clears 24px at 1440px leaves 23px at 320px. Setting the floor directly
+     makes it hold at every width. */
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 4px;
+}
+
+.pl-footer-link:hover {
+  color: var(--pl-purple);
+  text-decoration: underline;
+}
