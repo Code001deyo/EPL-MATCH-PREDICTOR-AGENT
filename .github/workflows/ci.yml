@@ -66,6 +66,59 @@ jobs:
         working-directory: frontend
         # CRA warnings are not failures here, but they are visible in the log.
         run: npm run build
+  qa:
+    name: Frontend QA
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      # Served without a backend on purpose. Every API call 404s, so this checks
+      # that each page renders its honest empty state and stays laid out — which
+      # is the state a freshly deployed instance actually serves before ingestion
+      # finishes. Expected 404 noise is filtered; any other console error fails.
+      - name: Serve the production build
+        working-directory: frontend
+        run: |
+          npx --yes serve -s build -l 3000 &
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null http://localhost:3000/ && exit 0
+            sleep 1
+          done
+          echo "::error::the static server did not come up"; exit 1
+
+      # Headless Chrome, because a real Chrome window on a developer machine will
+      # not go below ~500px and cannot reach 1920 on a 1366 display. 3 pages at
+      # 6 widths: horizontal overflow, over-wide elements, console errors,
+      # tap-target size, and whether the page rendered at all.
+      - name: Responsive and accessibility checks
+        working-directory: frontend
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: npm run qa:responsive -- http://localhost:3000
+
+      # The evidence, kept for the eye check no assertion replaces.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qa-screenshots
+          path: frontend/screenshots/
+          retention-days: 7
+          if-no-files-found: warn
+
 
   seed-artefacts:
     name: Seed snapshot present
