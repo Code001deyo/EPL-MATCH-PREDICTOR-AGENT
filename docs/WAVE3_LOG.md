@@ -586,3 +586,91 @@ tests, 15 frontend, 18/18 viewports against production, `/privacy` serving 200.
   logs loudly instead of sending. The retrain itself is unaffected.
 - No subscriber email has been proved to arrive; the sending domain is unverified
   in practice.
+
+---
+
+## Closing the three loose ends (2026-09-09) - role: deployment engineer
+
+### The mail problem was not the configuration
+
+`mailer.send()` returned a bare bool. When Resend rejected a message the reason
+went to a `print` in a container log, on a free instance that sleeps. From
+outside the process, an unverified sending domain, a wrong API key and simply
+having no subscribers were the same observation: nothing arrived.
+
+So diagnosis came first. `send()` now returns a `SendResult` carrying `ok`, the
+HTTP status and the provider's own wording. It defines `__bool__`, so every
+existing `if send(...)` caller is unchanged - including the dispatcher's
+rollback, which deletes the send-log row on failure so the next tick retries
+rather than recording a delivery that never happened. That has its own test,
+because a richer return type is exactly the kind of change that quietly breaks
+it.
+
+`POST /notifications/selftest` reports which settings are present, by name and
+boolean only, and optionally sends one message and returns what the provider
+said. Presence rather than values: answering "is this configured" should not
+require reading the secret to find out whether the secret exists.
+
+### What the diagnosis found
+
+Nothing was broken. **Resend accepted the message on the first try**, HTTP 200,
+`provider_id 52925ad0-64fe-41a0-aa17-91bda93ef8d0`, and it arrived. The sending
+domain was verified all along. The reason this had never been proved is that
+nobody had tried and nothing would have reported it if they had.
+
+### Render configuration
+
+`configure-service.yml` sets `ADMIN_EMAIL`, `RESET_EMAIL_TO` and
+`PUBLIC_SITE_URL` through the Render API using the existing `RENDER_API_KEY`.
+All three are non-secret and live in the file so the configuration is reviewable
+rather than sitting in a browser session.
+
+It uses `PUT /v1/services/{id}/env-vars/{key}`. The bulk form at `/env-vars`
+replaces the entire list and would have wiped `RESEND_API_KEY`,
+`ADMIN_PASSWORD_HASH`, `SESSION_SECRET` and `DATABASE_URL`. The destructive call
+is one path segment shorter than the safe one, which is why the warning sits next
+to it in the workflow.
+
+**The first run failed, correctly.** Setting an environment variable through the
+Render API does not restart the service: three variables accepted with HTTP 200
+at 15:58, no deploy created, and the backend still could not see two of them a
+minute later. The workflow had polled `/health`, which was the wrong question -
+the old container answers 200 perfectly well, it is simply running the previous
+configuration. It now triggers a deploy, waits for `live`, and then asks the
+running process what it can actually see. "The API accepted the value" and "the
+process can read it" are different claims.
+
+### A vulnerability found by walking the path
+
+`POST /subscribe` built the confirmation link from `request.headers["origin"]`.
+Send somebody else's address with `Origin: https://evil.example` and the service
+mails **them** a link to the attacker's site carrying a valid confirm token -
+the one credential that activates a subscription.
+
+It also broke the ordinary case: any client sending no Origin produced
+`/api/subscribe/confirm?token=...` with no host, a dead link in the one message
+that has to work.
+
+Now built from `PUBLIC_SITE_URL`, with a test pinning it. Found by preparing to
+prove subscriber mail end to end rather than by reasoning about it, which is the
+argument for actually walking a path.
+
+### Verified
+
+- Mail self-test: accepted by Resend **and confirmed received**.
+- All required settings visible to the running process:
+  `RESEND_API_KEY`, `ADMIN_EMAIL`, `RESET_EMAIL_TO`, `PUBLIC_SITE_URL` all true.
+  `NOTIFY_EMAIL_FROM` is unset, so the sender falls back to
+  `EPL Predictor <noreply@hanovatechnologies.co.ke>`, which Resend accepts.
+- 258 backend tests, 18/18 viewports.
+- Backend live on the pushed commit, verified by `/health`.
+
+### Still open
+
+- **`VERCEL_TOKEN`** is not a repository secret. It is a credential and is not
+  mine to create or store. Until it is set, the frontend deploys only from a
+  logged-in CLI.
+- **The subscriber confirmation flow** has been triggered for a fresh address and
+  is waiting on the link being opened. `/subscribe/status` reported one confirmed
+  subscriber before this, so the path has worked before; this run proves it again
+  with the Origin fix in place.
