@@ -45,13 +45,17 @@ const CHROME_CANDIDATES = [
 
 // The widths worth checking, not every width. 320 is the narrowest phone still in
 // use; 1920 is where a fluid layout starts looking sparse if nothing caps it.
+// `touch` is not decoration. It makes Chrome report `pointer: coarse`, which is
+// what the stylesheet keys the 44px navigation target off — so the check asks
+// the same question the CSS does, instead of demanding finger-sized rows on a
+// desktop where they only make the menu heavier.
 const VIEWPORTS = [
-  { name: "320-small-phone", width: 320, height: 720 },
-  { name: "375-phone", width: 375, height: 812 },
-  { name: "768-tablet", width: 768, height: 1024 },
-  { name: "1024-laptop", width: 1024, height: 768 },
-  { name: "1440-desktop", width: 1440, height: 900 },
-  { name: "1920-wide", width: 1920, height: 1080 },
+  { name: "320-small-phone", width: 320, height: 720, touch: true },
+  { name: "375-phone", width: 375, height: 812, touch: true },
+  { name: "768-tablet", width: 768, height: 1024, touch: true },
+  { name: "1024-laptop", width: 1024, height: 768, touch: false },
+  { name: "1440-desktop", width: 1440, height: 900, touch: false },
+  { name: "1920-wide", width: 1920, height: 1080, touch: false },
 ];
 
 const PAGES = [
@@ -88,7 +92,7 @@ function findChrome() {
 }
 
 /* Runs inside the page. Returns findings, not opinions. */
-function audit(minTap) {
+function audit(minTap, isTouch) {
   const doc = document.documentElement;
   const overflow = doc.scrollWidth > window.innerWidth + 1;
 
@@ -128,7 +132,10 @@ function audit(minTap) {
     //
     // The exemption matters. A check that flags every footer link produces noise
     // nobody reads, which is worse than not checking.
-    if (el.matches('button, [role="button"], input, select, nav a')) {
+    // Navigation links are held to the touch target only on a touch viewport,
+    // matching the `pointer: coarse` rule in the stylesheet.
+    const navLink = el.matches("nav a");
+    if (el.matches('button, [role="button"], input, select') || (navLink && isTouch)) {
       if (box.height > 0 && box.height < minTap) {
         smallTaps.push(`${describe(el)} (${Math.round(box.height)}px, control)`);
       }
@@ -167,7 +174,12 @@ function audit(minTap) {
   for (const view of VIEWPORTS) {
     for (const target of PAGES) {
       const page = await browser.newPage();
-      await page.setViewport({ width: view.width, height: view.height });
+      await page.setViewport({
+        width: view.width,
+        height: view.height,
+        hasTouch: view.touch,
+        isMobile: view.touch,
+      });
 
       const consoleErrors = [];
       page.on("console", (m) => {
@@ -188,7 +200,7 @@ function audit(minTap) {
         // real for a few hundred milliseconds and misleading afterwards.
         await new Promise((r) => setTimeout(r, 2500));
 
-        const result = await page.evaluate(audit, MIN_TAP);
+        const result = await page.evaluate(audit, MIN_TAP, view.touch);
         checks += 1;
 
         await page.screenshot({

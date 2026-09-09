@@ -63,9 +63,22 @@ button,
 a[role="button"],
 select,
 input:not([type="hidden"]),
-nav a,
 .pl-tap {
   min-height: 44px;
+}
+
+/* Navigation links get the touch target only where there is a thumb.
+ *
+ * Forcing 44px everywhere padded the desktop sidebar out and made the menu
+ * heavier than it should be, for no benefit: 44px is a guideline about fingers,
+ * and a mouse pointer hits a 37px row exactly as well. `pointer: coarse` is the
+ * question actually being asked — "is this being touched?" — rather than a width
+ * breakpoint standing in for it, which would also catch a small desktop window.
+ */
+@media (pointer: coarse) {
+  nav a {
+    min-height: 44px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -16,9 +16,25 @@ name: Send match notifications
 # cannot hold. Exact timing needs a paid scheduler.
 on:
   schedule:
-    # Every five minutes — the finest granularity GitHub Actions offers, and the
-    # value the queue's window in backend/notify/queue.py is sized against.
-    - cron: "*/5 * * * *"
+    # Every five minutes, but only inside the hours Premier League matches are
+    # actually played. This is a cost control, not a nicety.
+    #
+    # Each run wakes the Render instance, and a wake resets its 15-minute idle
+    # timer — so polling every five minutes round the clock means the instance
+    # never sleeps: 720 instance-hours a month against a 750-hour free
+    # allowance, 96% of it, with no headroom for anything else and no warning
+    # before it runs out.
+    #
+    # Windows are in UTC and deliberately generous at the end, so a 21:00 kickoff
+    # still has its final-whistle email sent inside the window.
+    #   Sat/Sun 11:00-23:59 — the main matchday block
+    #   Mon-Fri 17:00-23:59 — evening and midweek fixtures
+    # That is about 260 instance-hours a month rather than 720.
+    #
+    # A fixture outside these hours gets no email. That is a real gap and it is
+    # here on purpose: the alternative costs the whole free allowance.
+    - cron: "*/5 11-23 * * 6,0"
+    - cron: "*/5 17-23 * * 1-5"
   workflow_dispatch:
 
 concurrency:
