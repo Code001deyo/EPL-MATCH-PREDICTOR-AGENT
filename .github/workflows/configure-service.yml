@@ -92,26 +92,48 @@ jobs:
           set_var RESET_EMAIL_TO   "$RESET_EMAIL_TO"
           set_var PUBLIC_SITE_URL  "$PUBLIC_SITE_URL"
 
-      - name: Wait for the service to come back
-        # Changing environment variables triggers a redeploy. Reporting "set" and
-        # stopping would leave the caller believing the new configuration was
-        # live while the old process was still serving.
+      - name: Redeploy so the process picks them up
+        # Setting an environment variable through the Render API does NOT restart
+        # the service. Measured: three variables accepted with HTTP 200 at 15:58
+        # and no deploy created; the running process kept its old environment and
+        # the backend still could not see two of them a minute later.
+        #
+        # The first version of this workflow polled /health instead, which was the
+        # wrong question. The old container answers 200 perfectly well - it is
+        # healthy, it is just running yesterday's configuration. A deploy has to
+        # be triggered explicitly and waited for.
+        id: trigger
         env:
-          API: ${{ vars.API_BASE_URL }}
+          TOKEN: ${{ secrets.RENDER_API_KEY }}
         run: |
           set -euo pipefail
-          sleep 20
-          for i in $(seq 1 40); do
-            code=$(curl -s -o health.json -w '%{http_code}' --max-time 30 "$API/health" || true)
-            if [ "$code" = "200" ]; then
-              echo "healthy after $((20 + i * 15))s: $(cat health.json)"
-              exit 0
-            fi
-            echo "  [$i] HTTP $code"
-            sleep 15
+          # do_not_clear keeps the pip cache mount, so the 297 MB xgboost wheel is
+          # not downloaded again for a configuration change.
+          curl -sS --fail-with-body -X POST             -H "Authorization: Bearer $TOKEN"             -H "Content-Type: application/json"             -d '{"clearCache":"do_not_clear"}'             "https://api.render.com/v1/services/${SERVICE_ID}/deploys" > deploy.json
+          id=$(jq -r '.id' deploy.json)
+          test -n "$id" && test "$id" != "null" || { echo "::error::Render did not return a deploy id"; cat deploy.json; exit 1; }
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          echo "deploy $id started"
+
+      - name: Wait for the redeploy
+        env:
+          TOKEN: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            status=$(curl -sS --fail               -H "Authorization: Bearer $TOKEN"               "https://api.render.com/v1/services/${SERVICE_ID}/deploys/${{ steps.trigger.outputs.id }}"               | jq -r '.status')
+            echo "[$i] $status"
+            case "$status" in
+              live) echo "the service is live on the new configuration"; exit 0 ;;
+              # Every terminal state, not just success: a case matching only
+              # "live" would sit through a failed deploy and report a timeout
+              # instead of the reason.
+              build_failed|update_failed|canceled|deactivated|pre_deploy_failed)
+                echo "::error::the redeploy ended as '$status'"; exit 1 ;;
+            esac
+            sleep 20
           done
-          echo "::error::$API/health did not return within 10 minutes of the change"
-          exit 1
+          echo "::error::the redeploy did not finish within 20 minutes"; exit 1
 
       - name: Confirm the backend now sees the settings
         # The check that matters. "The API accepted the value" and "the running
