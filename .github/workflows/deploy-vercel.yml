@@ -101,16 +101,34 @@ jobs:
           # same bundle rather than differing in source maps alone.
           GENERATE_SOURCEMAP: "false"
           CI: "true"
-        run: npm run build
+          TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          # `vercel build`, not `npm run build`.
+          #
+          # This used to run npm and then hand the resulting `build/` folder to
+          # `vercel deploy build`. That does not do what it reads like: Vercel
+          # treats the uploaded folder as the project root and runs the project's
+          # own buildCommand from vercel.json inside it. A CRA output directory
+          # has no package.json, so every deploy died with
+          # `Command "npm run build" exited with 254`.
+          #
+          # `vercel build` runs that same buildCommand here and writes
+          # .vercel/output, which `--prebuilt` below uploads as finished work. The
+          # intent the old comment claimed is now actually true: the artifact that
+          # ships is the one produced in this job.
+          npx --yes vercel@latest pull --yes --environment=production --token "$TOKEN"
+          npx --yes vercel@latest build --prod --token "$TOKEN"
 
       - name: Deploy
         env:
           TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           set -euo pipefail
-          # --prod targets production. The build above is reused rather than
-          # rebuilt on Vercel, so what was tested here is what ships.
-          npx --yes vercel@latest deploy build \
+          # --prebuilt uploads .vercel/output as-is. Nothing is rebuilt remotely,
+          # so the bundle carrying this commit's REACT_APP_COMMIT is the bundle
+          # that goes live, which is what the verify step below then checks.
+          npx --yes vercel@latest deploy --prebuilt \
             --prod --yes --token "$TOKEN" \
             --archive=tgz > url.txt
           echo "Deployed: $(cat url.txt)"
