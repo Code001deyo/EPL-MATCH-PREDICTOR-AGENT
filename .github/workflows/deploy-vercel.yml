@@ -100,6 +100,14 @@ jobs:
 
           if [ "$code" = "200" ]; then
             echo "token can read $(jq -r '.name' project.json) (${VERCEL_PROJECT_ID})"
+            # The CLI wants a team *slug*, not the team id the API takes, and
+            # gives the same unhelpful "Could not retrieve Project Settings" when
+            # it does not have one. Resolve it here rather than hardcoding it.
+            slug=$(curl -sS --max-time 60               -H "Authorization: Bearer $TOKEN"               "https://api.vercel.com/v2/teams/${VERCEL_ORG_ID}" | jq -r '.slug // empty')
+            if [ -n "$slug" ]; then
+              echo "team slug: $slug"
+              echo "VERCEL_SCOPE=$slug" >> "$GITHUB_ENV"
+            fi
             exit 0
           fi
 
@@ -152,8 +160,11 @@ jobs:
           jq -nc --arg p "$VERCEL_PROJECT_ID" --arg o "$VERCEL_ORG_ID" \
             '{projectId: $p, orgId: $o}' > .vercel/project.json
 
-          npx --yes vercel@latest pull --yes --environment=production --token "$TOKEN"
-          npx --yes vercel@latest build --prod --token "$TOKEN"
+          scope=""
+          [ -n "${VERCEL_SCOPE:-}" ] && scope="--scope ${VERCEL_SCOPE}"
+
+          npx --yes vercel@latest pull --yes --environment=production $scope --token "$TOKEN"
+          npx --yes vercel@latest build --prod $scope --token "$TOKEN"
 
       - name: Deploy
         env:
