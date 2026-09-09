@@ -1,0 +1,97 @@
+name: Mail self-test
+
+# Asks the deployed backend whether it can actually send email, and prints the
+# provider's verbatim answer when it cannot.
+#
+# This exists because "no email arrived" used to have three indistinguishable
+# causes - an unverified sending domain, a wrong API key, and simply having no
+# subscribers - all of which surfaced as the same silence. The reason lived in a
+# `print` inside a container log, on a free instance that sleeps.
+#
+# It is a workflow because the admin key is a repository secret, and diagnosing
+# mail should not require pasting a key into a terminal.
+on:
+  workflow_dispatch:
+    inputs:
+      send:
+        description: "Actually send a message (off = report the configuration only)"
+        type: boolean
+        default: false
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check configuration
+        run: |
+          test -n "${{ secrets.ADMIN_API_KEY }}" || { echo "::error::repository secret ADMIN_API_KEY is not set"; exit 1; }
+          test -n "${{ vars.API_BASE_URL }}" || { echo "::error::repository variable API_BASE_URL is not set"; exit 1; }
+
+      - name: Wake the instance
+        env:
+          API: ${{ vars.API_BASE_URL }}
+        run: |
+          for i in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$API/health" || true)
+            [ "$code" = "200" ] && { echo "awake after $((i*10))s"; exit 0; }
+            sleep 10
+          done
+          echo "::error::$API/health did not respond within 2 minutes"; exit 1
+
+      - name: Ask the backend
+        env:
+          API: ${{ vars.API_BASE_URL }}
+          KEY: ${{ secrets.ADMIN_API_KEY }}
+          SEND: ${{ inputs.send }}
+        run: |
+          set -euo pipefail
+          curl -sS --fail-with-body --max-time 90 \
+            -X POST "$API/notifications/selftest?send=${SEND:-false}" \
+            -H "X-Admin-Key: $KEY" -o report.json
+          cat report.json
+
+      - name: Report
+        run: |
+          set -euo pipefail
+          python - <<'REPORT'
+          import json, os, sys
+
+          report = json.load(open("report.json"))
+          settings = report.get("settings", {})
+          result = report.get("result") or {}
+
+          lines = ["## Mail self-test", "",
+                   f"Sender: `{report.get('sender')}`", "",
+                   "| Setting | Present |", "|---|---|"]
+          for key, present in settings.items():
+              lines.append(f"| {key} | {'yes' if present else 'no'} |")
+
+          if report.get("warning"):
+              lines += ["", f"**{report['warning']}**"]
+
+          if not result:
+              lines += ["", "_Configuration only; nothing was sent._"]
+          elif report.get("sent"):
+              lines += ["", f"A message was accepted by the provider "
+                            f"(id `{result.get('provider_id')}`).",
+                        "",
+                        "Accepted is not the same as delivered. Only the inbox can "
+                        "confirm the second one."]
+          else:
+              # The whole point of this workflow. Verbatim, not summarised: the
+              # provider's wording is what says which of the three causes it is.
+              lines += ["", "### The provider refused it", "",
+                        f"HTTP `{result.get('status')}`", "",
+                        "```", str(result.get("error")), "```"]
+
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a", encoding="utf-8") as fh:
+                  fh.write("\n".join(lines) + "\n")
+          print("\n".join(lines))
+
+          # A refused send fails the run. A diagnostic that goes green while mail
+          # is broken is the thing this replaced.
+          if result and not report.get("sent"):
+              sys.exit(1)
+          REPORT
