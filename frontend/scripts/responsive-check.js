@@ -52,19 +52,37 @@ const CHROME_CANDIDATES = [
 const VIEWPORTS = [
   { name: "320-small-phone", width: 320, height: 720, touch: true },
   { name: "375-phone", width: 375, height: 812, touch: true },
+  // A phone on its side. Short viewports are where 100vh layouts, sticky
+  // headers and vertically centred boxes fail, and nothing else here is short.
+  { name: "812-phone-landscape", width: 812, height: 375, touch: true },
   { name: "768-tablet", width: 768, height: 1024, touch: true },
   { name: "1024-laptop", width: 1024, height: 768, touch: false },
+  // The commonest laptop, previously jumped over between 1024 and 1440.
+  { name: "1280-laptop", width: 1280, height: 800, touch: false },
   { name: "1440-desktop", width: 1440, height: 900, touch: false },
   { name: "1920-wide", width: 1920, height: 1080, touch: false },
 ];
 
+// Every public route. It was three of nine, and "18/18 green" was being read as
+// "the site is responsive" when it meant "a third of it is".
 const PAGES = [
   { name: "dashboard", path: "/" },
   { name: "race", path: "/race" },
   { name: "predict", path: "/predict" },
+  { name: "analytics", path: "/analytics" },
+  { name: "teams", path: "/teams" },
+  { name: "history", path: "/history" },
+  { name: "model", path: "/model" },
+  { name: "explainer", path: "/explainer" },
+  { name: "privacy", path: "/privacy" },
 ];
 
 const MIN_TAP = 44;
+
+// A floor on rendered type, not a target. 9px rather than 12: the footer's legal
+// line is deliberately 9px at 320px, and a rule that has to exempt the thing
+// violating it is not a rule. This catches an accident and permits a decision.
+const MIN_FONT_PX = 9;
 
 /* Console errors that are not defects in the page.
  *
@@ -92,7 +110,7 @@ function findChrome() {
 }
 
 /* Runs inside the page. Returns findings, not opinions. */
-function audit(minTap, isTouch) {
+function audit(minTap, isTouch, minFont) {
   const doc = document.documentElement;
   const overflow = doc.scrollWidth > window.innerWidth + 1;
 
@@ -107,10 +125,23 @@ function audit(minTap, isTouch) {
 
   const tooWide = [];
   const smallTaps = [];
+  const tinyText = [];
 
   for (const el of document.querySelectorAll("body *")) {
     const box = el.getBoundingClientRect();
     if (box.width === 0 && box.height === 0) continue;
+
+    // Only elements holding their own text, so a wrapper is not blamed for a
+    // child's size and an SVG's internal units are not read as CSS pixels.
+    const ownText = [...el.childNodes].some(
+      (n) => n.nodeType === 3 && n.textContent.trim().length > 1
+    );
+    if (ownText && !el.closest("svg")) {
+      const size = parseFloat(getComputedStyle(el).fontSize);
+      if (size && size < minFont) {
+        tinyText.push(`${describe(el)} (${size.toFixed(1)}px)`);
+      }
+    }
 
     // Only elements that themselves overflow the viewport, and only if no
     // ancestor is a deliberate scroll container — a wide table inside
@@ -151,6 +182,7 @@ function audit(minTap, isTouch) {
 
   return {
     overflow,
+    tinyText: [...new Set(tinyText)].slice(0, 6),
     scrollWidth: doc.scrollWidth,
     innerWidth: window.innerWidth,
     tooWide: [...new Set(tooWide)].slice(0, 8),
@@ -202,7 +234,7 @@ function audit(minTap, isTouch) {
         // real for a few hundred milliseconds and misleading afterwards.
         await new Promise((r) => setTimeout(r, 2500));
 
-        const result = await page.evaluate(audit, MIN_TAP, view.touch);
+        const result = await page.evaluate(audit, MIN_TAP, view.touch, MIN_FONT_PX);
         checks += 1;
 
         await page.screenshot({
@@ -221,6 +253,9 @@ function audit(minTap, isTouch) {
         }
         if (result.smallTaps.length) {
           failures.push(`${label}: tap targets under ${MIN_TAP}px — ${result.smallTaps.join(", ")}`);
+        }
+        if (result.tinyText.length) {
+          failures.push(`${label}: text under ${MIN_FONT_PX}px — ${result.tinyText.join(", ")}`);
         }
         if (consoleErrors.length) {
           failures.push(`${label}: console errors — ${consoleErrors.slice(0, 3).join(" | ")}`);

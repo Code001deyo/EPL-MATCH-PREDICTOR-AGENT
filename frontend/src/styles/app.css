@@ -619,3 +619,24 @@ input:not([type="hidden"]),
   color: var(--pl-purple);
   text-decoration: underline;
 }
+
+
+/* --- full-height shell ---------------------------------------------------
+ *
+ * `100vh` on a mobile browser means the viewport *without* the address bar. The
+ * bar is part of the screen until you scroll, so a 100vh layout runs underneath
+ * it and the last few centimetres of the page are unreachable at rest. `100dvh`
+ * is the dynamic viewport height and tracks the bar as it hides and returns.
+ *
+ * Declared twice on purpose: a browser that does not know `dvh` ignores the
+ * second line and keeps today's behaviour, and one that does takes it. This is
+ * the one thing on the page the headless checks cannot see - there is no address
+ * bar in a headless viewport, so every green run has been silent about it.
+ *
+ * A class rather than an inline style because a React style object cannot hold
+ * the same property twice, and the fallback is the entire point.
+ */
+.pl-fullheight {
+  min-height: 100vh;
+  min-height: 100dvh;
+}

@@ -42,14 +42,13 @@ export default function App() {
 function Shell() {
   const narrow = useIsNarrow();
   return (
-      <div style={{ fontFamily: "'Inter', sans-serif", background: C.slate50, minHeight: "100vh" }}>
+      <div className="pl-fullheight" style={{ fontFamily: "'Inter', sans-serif", background: C.slate50 }}>
         <Sidebar />
-        <main style={{
+        <main className="pl-fullheight" style={{
           // The 220px gutter belongs to the fixed rail; when the rail becomes a
           // drawer the gutter has to go with it, or the content stays indented
           // behind nothing on a narrow screen.
           marginLeft: narrow ? 0 : SIDEBAR_W,
-          minHeight: "100vh",
           padding: narrow ? "68px 16px 24px" : "32px 28px",
         }}>
           <Routes>

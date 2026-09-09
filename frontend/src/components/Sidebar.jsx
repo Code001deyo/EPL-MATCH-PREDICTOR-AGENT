@@ -52,8 +52,8 @@ export default function Sidebar() {
         />
       )}
 
-      <aside style={{
-        width: SIDEBAR_W, minHeight: "100vh", background: C.navy,
+      <aside className="pl-fullheight" style={{
+        width: SIDEBAR_W, background: C.navy,
         display: "flex", flexDirection: "column",
         position: "fixed", top: 0, left: 0, zIndex: 115,
         transform: visible ? "translateX(0)" : `translateX(-${SIDEBAR_W}px)`,
