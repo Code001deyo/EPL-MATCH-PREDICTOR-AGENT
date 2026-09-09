@@ -80,6 +80,12 @@ export default function Privacy() {
             rented, shared for advertising, or passed to anyone else.
           </p>
           <p style={p}>
+            The person operating this site can also see the list, from a
+            password-protected console, and can unsubscribe or erase an address on
+            request. That is the whole of the access: there is no export, no
+            analytics on it, and nothing is sent anywhere else.
+          </p>
+          <p style={p}>
             Match data on this site comes from the Premier League's public feed and
             from football-data.co.uk. That is data about football, not about you,
             and it flows in the opposite direction.
@@ -98,7 +104,8 @@ export default function Privacy() {
             unsubscribed and stops receiving anything, but the row is kept so that
             a later bulk import could not quietly re-add you. If you would rather
             it were erased completely, ask and it will be, along with the record of
-            what was sent to you.
+            what was sent to you. That is a button in the operator console rather
+            than a promise to get round to, so it happens the same day.
           </p>
         </Section>
       </Card>

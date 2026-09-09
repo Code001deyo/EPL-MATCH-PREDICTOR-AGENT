@@ -1,6 +1,7 @@
 import RetrainPanel from "../../components/model/RetrainPanel";
 import SecurityCard from "../../components/secure/SecurityCard";
 import DataActions from "../../components/secure/DataActions";
+import SubscriberList from "../../components/secure/SubscriberList";
 import DataProvenance from "../../components/DataProvenance";
 import useAuth from "../../hooks/useAuth";
 import { C, radius, space, type } from "../../theme";
@@ -40,6 +41,10 @@ export default function Console() {
 
       <div style={{ marginBottom: space.lg }}>
         <DataActions />
+      </div>
+
+      <div style={{ marginBottom: space.lg }}>
+        <SubscriberList />
       </div>
 
       <div style={{ marginBottom: space.lg }}>

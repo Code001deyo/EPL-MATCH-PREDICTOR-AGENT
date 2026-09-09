@@ -9,7 +9,8 @@ from data.ingestion import get_season_ids, current_season_id, _current_season_la
 import lifecycle
 from routers import (predict, teams, results, analytics, analytics_model,
                      auth_router, model as model_router, subscribe as subscribe_router,
-                     race as race_router)
+                     race as race_router,
+                     subscribers_admin)
 
 # The interactive docs enumerate every route, so on a public deployment they
 # advertise /auth/login, /model/retrain and /data/refresh to anyone who asks —
@@ -58,6 +59,7 @@ app.include_router(analytics_model.router)
 app.include_router(model_router.router)
 app.include_router(subscribe_router.router)
 app.include_router(race_router.router)
+app.include_router(subscribers_admin.router)
 
 
 @app.on_event("startup")
