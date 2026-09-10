@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "REACT_APP_COMMIT=$VERCEL_GIT_COMMIT_SHA GENERATE_SOURCEMAP=false npm run build",
+  "buildCommand": "REACT_APP_COMMIT=${VERCEL_GIT_COMMIT_SHA:-$REACT_APP_COMMIT} GENERATE_SOURCEMAP=false npm run build",
   "outputDirectory": "build",
   "framework": "create-react-app",
   "rewrites": [
