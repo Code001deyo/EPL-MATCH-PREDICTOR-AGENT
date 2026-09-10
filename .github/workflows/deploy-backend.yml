@@ -38,7 +38,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check configuration
         # The presence check reads these from the environment. Interpolating a
