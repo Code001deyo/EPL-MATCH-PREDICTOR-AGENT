@@ -3,7 +3,7 @@ uvicorn==0.29.0
 sqlalchemy==2.0.30
 pandas==2.2.2
 numpy==1.26.4
-xgboost==2.0.3
+xgboost==3.4.1
 scikit-learn==1.4.2
 joblib==1.4.2
 pydantic==2.7.1
