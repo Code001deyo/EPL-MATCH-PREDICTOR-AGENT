@@ -674,3 +674,92 @@ argument for actually walking a path.
   is waiting on the link being opened. `/subscribe/status` reported one confirmed
   subscriber before this, so the path has worked before; this run proves it again
   with the Origin fix in place.
+
+---
+
+## Responsiveness and accessibility (2026-09-10)
+
+### What "18/18 green" actually meant
+
+Three pages at six widths. The app has nine public pages and an operator console.
+The number had been quoted all day as if it meant the site was responsive.
+
+It is 128 checks now: nine public pages plus the console, at eight viewports,
+with two interactive states, and an accessibility pass per page.
+
+### The one live bug automation could not see
+
+`min-height: 100vh` on the app shell and the sidebar. On a mobile browser `100vh`
+is the viewport *without* the address bar, which is part of the screen until you
+scroll - so the last centimetres of every page sat underneath it at rest.
+
+Headless Chrome cannot catch this. There is no address bar in a headless
+viewport, so every green run had been silent about it. Fixed with `100dvh` and a
+`100vh` line above it, as a class rather than an inline style because a React
+style object cannot hold the same property twice and the fallback is the point.
+
+### A layout rule that hid a control
+
+The column-hiding rule under 620px was written for the race table's nine columns
+and applied to every `.pl-table`. On the subscriber list column five is Actions,
+so an operator on a phone could read the list and had no way to unsubscribe or
+erase anyone. Scoped to `.pl-table--race`, and the table stacks below 720px using
+a treatment that had been in the stylesheet unused since it was written.
+
+The check written for it was wrong on the first attempt: it asked the *control*
+whether it was hidden, but an element inside a `display:none` subtree keeps its
+own computed display, so the answer was always no. It asks the cell now. Verified
+by putting the bug back, watching it fail, and taking it out again - a regression
+test that has never failed has not been tested.
+
+### 288 contrast violations
+
+`axe-core` now runs per page on four rules. Its first run found 288 colour
+contrast failures.
+
+The fault was at the token level, and the theme file had already written down the
+rule it was breaking: brand colours decorate, semantic colours carry meaning.
+Brand colours were being used as type. `#00ff85` as text on white measures
+**1.34:1** - not readable by anyone. `slate400` measured 2.56:1 and was the
+muted-text colour in 57 places.
+
+Two of my own mistakes on the way, both the same mistake: darkening `slate400`
+fixed the white pages and broke the purple sidebar, and a global swap of the
+brand green turned the sidebar's link dark-on-dark. A token used on two
+backgrounds must satisfy the darker one or have a sibling for the other surface.
+Hence `onNavyMuted` and `blueText`.
+
+The largest single cause was drift the stylesheet warned about in its own header:
+`--slate-400` in `app.css` still held the value `theme.js` no longer used.
+
+Also fixed: five password fields on the console and two on the sign-in page had
+labels sitting beside their inputs rather than associated with them.
+
+### Local and production reach different states
+
+Two faults appeared only against production. The sign-in page had never been
+loaded by the sweep, because production does not accept this machine's admin key
+and served the sign-in form where local served the console. And `semantic.neutral`
+failed only where a delta happened to be neutral, which local's data never was.
+
+Running the sweep against one environment checks one environment.
+
+### Verified
+
+- **128/128** locally and against production, zero accessibility violations.
+- `dvh` confirmed by measurement at a 375x400 viewport, not by a screenshot.
+- Frontend verified live by its `build-commit` tag at `298428bb`.
+- 271 backend tests, 15 frontend.
+
+### Deliberately not done
+
+**Visual regression.** The plan called for a pixel baseline. 128 full-page
+screenshots is a large binary baseline to carry in git, and charts vary
+sub-pixel between runs, so a naive comparison cries wolf and gets switched off. A
+scoped version - two pages at two widths, above the fold only - would carry most
+of the value at a fraction of the weight. Left as a decision rather than
+half-built.
+
+**Real devices.** Headless Chromium is not Safari. Dynamic viewport behaviour,
+momentum scrolling and input zoom-on-focus all differ, and `100dvh` is exactly
+the kind of thing worth confirming on a real iPhone.
