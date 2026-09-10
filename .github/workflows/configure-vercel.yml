@@ -1,0 +1,97 @@
+name: Configure the Vercel project
+
+# Sets the project's Root Directory, and reports the settings that decide
+# whether a git push builds.
+#
+# Why this exists: every deployment the git integration made failed with
+#
+#   npm error path /vercel/path0/package.json
+#   npm error enoent Could not read package.json
+#   Error: Command "npm run build" exited with 254
+#
+# Vercel was cloning the repo and building from its root, where there is no
+# package.json - the app is in frontend/. Deploys from the CLI worked because
+# they are run from inside frontend/, which hid the problem for a day: the site
+# was current, and only the automatic path was broken.
+#
+# It uses the REST API rather than the CLI on purpose. The token in
+# VERCEL_TOKEN is accepted by api.vercel.com and rejected by the CLI, which
+# answers "User not found" - so the API is the half that works.
+on:
+  workflow_dispatch:
+    inputs:
+      root_directory:
+        description: "Directory holding package.json, relative to the repo root"
+        type: string
+        default: "frontend"
+
+concurrency:
+  group: configure-vercel
+  cancel-in-progress: false
+
+env:
+  VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check configuration
+        run: |
+          test -n "${{ secrets.VERCEL_TOKEN }}" || { echo "::error::repository secret VERCEL_TOKEN is not set"; exit 1; }
+          test -n "$VERCEL_PROJECT_ID" || { echo "::error::repository variable VERCEL_PROJECT_ID is not set"; exit 1; }
+
+      - name: Report what the project is set to now
+        env:
+          TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o before.json -w '%{http_code}' --max-time 60 \
+            -H "Authorization: Bearer $TOKEN" \
+            "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_ORG_ID}")
+          if [ "$code" != "200" ]; then
+            echo "::error::could not read the project (HTTP $code)"
+            jq -r '.error.message // .' before.json 2>/dev/null || cat before.json
+            exit 1
+          fi
+          # One jq call per line. A multi-line jq string has to be indented
+          # past the block scalar or YAML ends the block at the first
+          # short line and reads it as a mapping key.
+          echo "  rootDirectory:    $(jq -r '.rootDirectory // "<repo root>"' before.json)"
+          echo "  framework:        $(jq -r '.framework // "-"' before.json)"
+          echo "  buildCommand:     $(jq -r '.buildCommand // "<from vercel.json>"' before.json)"
+          echo "  outputDirectory:  $(jq -r '.outputDirectory // "<from vercel.json>"' before.json)"
+          echo "  productionBranch: $(jq -r '.link.productionBranch // "-"' before.json)"
+          echo "  repo:             $(jq -r '"\(.link.org // "-")/\(.link.repo // "-")"' before.json)"
+
+      - name: Set the root directory
+        env:
+          TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          ROOT: ${{ inputs.root_directory }}
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o after.json -w '%{http_code}' --max-time 60 \
+            -X PATCH "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_ORG_ID}" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg r "$ROOT" '{rootDirectory: $r}')")
+
+          if [ "$code" -ge 400 ]; then
+            echo "::error::setting rootDirectory failed with HTTP $code"
+            jq -r '.error.message // .' after.json 2>/dev/null || cat after.json
+            exit 1
+          fi
+          echo "rootDirectory is now: $(jq -r '.rootDirectory // "<repo root>"' after.json)"
+
+      - name: Say what happens next
+        run: |
+          {
+            echo "## Vercel project"
+            echo
+            echo "\`rootDirectory\` set to \`${{ inputs.root_directory }}\`."
+            echo
+            echo "This does not rebuild anything by itself. The next push that"
+            echo "touches the frontend will build, and the *Verify the frontend"
+            echo "deployed* check on that commit is what proves it."
+          } >> "$GITHUB_STEP_SUMMARY"
