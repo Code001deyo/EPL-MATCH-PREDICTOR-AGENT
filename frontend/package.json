@@ -33,7 +33,7 @@
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^14.3.1",
-    "puppeteer-core": "^23.11.1",
+    "puppeteer-core": "^25.10.0",
     "axe-core": "^4.13.0"
   },
   "jest": {
