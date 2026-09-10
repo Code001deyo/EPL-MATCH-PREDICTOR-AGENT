@@ -65,7 +65,10 @@ export const semantic = {
   bad: "#a81034",
   badBg: "#fbe9ee",
   badBorder: "#f0bfcd",
-  neutral: "#64748b",
+  // Matched to slate500. It held #64748b after that was darkened, which measured
+  // 4.34:1 on its own neutralBg tint - and only showed on production, where a
+  // delta happened to be neutral and local's never was.
+  neutral: "#586274",
   neutralBg: "#f1f5f9",
   neutralBorder: "#e2e8f0",
 };

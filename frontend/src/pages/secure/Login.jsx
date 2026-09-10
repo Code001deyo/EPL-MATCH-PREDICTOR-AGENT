@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useId} from "react";
 import axios from "axios";
 import Card from "../../components/ui/Card";
 import EmptyState from "../../components/ui/EmptyState";
@@ -87,10 +87,16 @@ export default function AdminLogin() {
 }
 
 function Field({ label, value, onChange, type: inputType = "text", ...rest }) {
+  // Same fix as the operator console's form: a <label> beside an <input> is not
+  // a label for it. Found on production rather than locally, because production
+  // does not accept this machine's admin key and therefore serves the sign-in
+  // page where local served the console - a page the sweep had never reached.
+  const id = useId();
   return (
     <div style={{ marginBottom: space.md }}>
-      <label style={{ display: "block", ...type.label, color: C.slate600, marginBottom: 4 }}>{label}</label>
+      <label htmlFor={id} style={{ display: "block", ...type.label, color: C.slate600, marginBottom: 4 }}>{label}</label>
       <input
+        id={id}
         type={inputType}
         value={value}
         onChange={(e) => onChange(e.target.value)}
