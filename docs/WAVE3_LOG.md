@@ -763,3 +763,75 @@ half-built.
 **Real devices.** Headless Chromium is not Safari. Dynamic viewport behaviour,
 momentum scrolling and input zoom-on-focus all differ, and `100dvh` is exactly
 the kind of thing worth confirming on a real iPhone.
+
+---
+
+## The Vercel deploys, finally (2026-09-10)
+
+The git integration had never been the problem it looked like.
+
+`vercel[bot]` was creating GitHub deployments the whole time, and the Vercel
+status on HEAD read **failure**. The build log said:
+
+```
+Cloning github.com/Code001deyo/EPL-MATCH-PREDICTOR-AGENT (Commit: 9b88b8d)
+npm error path /vercel/path0/package.json
+npm error enoent Could not read package.json
+Error: Command "npm run build" exited with 254
+```
+
+Vercel was building from the repo root. The app is in `frontend/`, and the
+project's **Root Directory had never been set**. Confirmed by reading the project
+over the API: `rootDirectory: <repo root>`.
+
+Deploys from the CLI worked because they are run from inside `frontend/`. That
+hid it for a day: the site stayed current, so the only symptom was that pushes
+did not deploy - which looks exactly like an integration that is not connected.
+
+### What that corrects
+
+Several conclusions along the way were wrong, and each was reached from a
+plausible reading of an unhelpful error:
+
+- "The token is project-scoped and the CLI needs an account token." `vcp_` is
+  Vercel's prefix for a *personal access token*. Wrong, and it sent two token
+  attempts to the wrong settings page.
+- "The git integration has stopped firing." It was firing and failing.
+- "Vercel skips builds when nothing under `frontend/` changed." It was not
+  skipping them.
+- Writing `.vercel/project.json` in CI, then resolving a team slug. Neither was
+  the issue.
+
+The common thread: `Could not retrieve Project Settings` and a missing
+deployment both point away from "the build ran and failed". The thing that
+settled it was reading the build log, which was available from the first failure.
+
+### Fixed and verified
+
+`configure-vercel.yml` sets the root directory through the REST API - the API
+accepts the token the CLI rejects, so that is the half that works. It also prints
+the settings that decide whether a push builds: root directory, framework,
+production branch, and the linked repo.
+
+Then proved rather than assumed. A one-line frontend commit, pushed:
+
+```
+pushed b1f3835a
+  [1] serving 298428bb
+  [2] serving b1f3835a
+VERIFIED: the git integration deployed b1f3835a on its own
+```
+
+Roughly forty seconds, no CLI involved. The *Verify the frontend deployed* check
+went green on the same commit, which is the first time that check has passed on a
+deployment it did not have to wait out.
+
+Production sweep after it: **128/128**, no responsive, tap-target, contrast or
+console-error problems.
+
+### Still deliberately not done
+
+Visual regression, for the reasons in the previous entry: 128 full-page
+screenshots is a heavy baseline for git, and chart sub-pixel variance makes a
+naive comparison unreliable. A scoped version is the sensible shape if it is
+wanted.
