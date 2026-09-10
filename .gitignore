@@ -9,6 +9,10 @@ __pycache__/
 *.pyd
 .env
 venv/
+.venv/
+# .venv313/ and friends are ignored today only by a .gitignore pip writes
+# inside the virtualenv. That is not a rule this repository controls.
+.venv*/
 *.egg-info/
 
 # Build outputs
@@ -51,7 +55,22 @@ Thumbs.db
 .vercel/
 *.pem
 *.key
-!frontend/**/*.key
+*.p12
+*.pfx
+*.jks
+id_rsa*
+id_ed25519*
+*.ppk
+# Registry and host credentials, which land in the working tree by accident
+# more often than any of the above.
+.npmrc
+.netrc
+_netrc
+credentials.json
+# `!frontend/**/*.key` used to sit here, un-ignoring private keys under
+# frontend/. It protected nothing - no such file has ever been tracked - and
+# on a public repository an exception that re-admits a key is worth deleting
+# even when it is currently harmless.
 
 # Runtime state. backend/dbdata/ is the container's live database and is created
 # by any local run or a bare `docker run` with a bind mount; it is not the
@@ -59,6 +78,12 @@ Thumbs.db
 backend/dbdata/
 *.sqlite
 *.sqlite3
+# `*.db` was missing, and a developer's local database is the one file in
+# this project that holds real subscriber addresses. The negation that
+# follows keeps the committed seed snapshot, and has to come after the rule
+# it undoes: in .gitignore the last matching line wins.
+*.db
+!backend/seed/*.db
 
 # Saved third-party pages. pl_page.html was a scraping reference that sat in the
 # repo unreferenced for months and carried three of the Premier League's own

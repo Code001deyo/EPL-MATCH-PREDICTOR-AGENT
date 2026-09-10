@@ -31,15 +31,29 @@ concurrency:
   group: retrain-model
   cancel-in-progress: false
 
+# Least privilege. Nothing here writes to the repository: the deploys are
+# driven through Render's and Vercel's own APIs, and deploy-backend.yml pushes
+# to Hugging Face with its own token. A workflow that needs more should raise
+# it on the one job that needs it, not here.
+permissions:
+  contents: read
+
 jobs:
   retrain:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
       - name: Check configuration
+        # The presence check reads these from the environment. Interpolating a
+        # secret into the script text puts its value in the shell's command
+        # line, where a stray quote makes it executable and a trace makes it
+        # visible; as a variable it is neither.
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
         run: |
-          test -n "${{ secrets.ADMIN_API_KEY }}" || { echo "::error::repository secret ADMIN_API_KEY is not set"; exit 1; }
-          test -n "${{ vars.API_BASE_URL }}" || { echo "::error::repository variable API_BASE_URL is not set"; exit 1; }
+          test -n "${ADMIN_API_KEY:-}" || { echo "::error::repository secret ADMIN_API_KEY is not set"; exit 1; }
+          test -n "${API_BASE_URL:-}" || { echo "::error::repository variable API_BASE_URL is not set"; exit 1; }
 
       - name: Wake the instance
         env:
@@ -91,10 +105,16 @@ jobs:
         env:
           API: ${{ vars.API_BASE_URL }}
           KEY: ${{ secrets.ADMIN_API_KEY }}
+          # Through the environment, never interpolated into the script.
+          # An `inputs` expression is substituted by the workflow parser before
+          # bash sees the line, so a value carrying a quote and a semicolon runs
+          # as a command with this job's secrets in scope. Read as a shell
+          # variable instead, where quoting is enough.
+          SEASONS: ${{ inputs.seasons }}
         run: |
           set -euo pipefail
           curl -sS --fail-with-body --max-time 120 \
-            -X POST "$API/model/backtest/run?seasons=${{ inputs.seasons }}" \
+            -X POST "$API/model/backtest/run?seasons=${SEASONS}" \
             -H "X-Admin-Key: $KEY" -o bt.json
           cat bt.json
           job=$(python -c "import json;print(json.load(open('bt.json'))['job_id'])")

@@ -44,6 +44,13 @@ if [ -n "$(ls -A "$MODEL_DIR" 2>/dev/null)" ]; then
     echo "[entrypoint] existing models kept in $MODEL_DIR"
 elif [ -d "$SEED_DIR/models" ]; then
     echo "[entrypoint] no trained models in $MODEL_DIR — restoring baked models"
+    # Checked before the copy, because the copy is what puts a repository file in
+    # front of joblib.load - and joblib.load is pickle.load, which runs whatever
+    # the file tells it to. This is the boundary; fail closed at it.
+    if ! python scripts/verify_seed_models.py; then
+        echo "[entrypoint] FATAL: baked models do not match their checksums; refusing to restore them"
+        exit 1
+    fi
     cp "$SEED_DIR"/models/* "$MODEL_DIR"/
 else
     echo "[entrypoint] WARNING: no models in $MODEL_DIR and no baked models at $SEED_DIR/models"

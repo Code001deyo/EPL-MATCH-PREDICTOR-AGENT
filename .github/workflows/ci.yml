@@ -10,6 +10,13 @@ on:
   # second, drifting copy of it.
   workflow_call:
 
+# Least privilege. Nothing here writes to the repository: the deploys are
+# driven through Render's and Vercel's own APIs, and deploy-backend.yml pushes
+# to Hugging Face with its own token. A workflow that needs more should raise
+# it on the one job that needs it, not here.
+permissions:
+  contents: read
+
 jobs:
   backend:
     name: Backend tests
@@ -26,6 +33,13 @@ jobs:
       - name: Install dependencies
         working-directory: backend
         run: pip install -r requirements.txt pytest
+
+      - name: Verify the baked models match their checksums
+        working-directory: backend
+        # A .pkl is executable code: joblib.load is pickle.load. This makes a
+        # model file that changed without its recorded hash a red check on the
+        # pull request, rather than something discovered on the deploy host.
+        run: python scripts/verify_seed_models.py
 
       - name: Run tests
         working-directory: backend

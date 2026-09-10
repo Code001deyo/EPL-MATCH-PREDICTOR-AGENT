@@ -33,13 +33,26 @@ env:
   VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
 
+# Least privilege. Nothing here writes to the repository: the deploys are
+# driven through Render's and Vercel's own APIs, and deploy-backend.yml pushes
+# to Hugging Face with its own token. A workflow that needs more should raise
+# it on the one job that needs it, not here.
+permissions:
+  contents: read
+
 jobs:
   configure:
     runs-on: ubuntu-latest
     steps:
       - name: Check configuration
+        # The presence check reads these from the environment. Interpolating a
+        # secret into the script text puts its value in the shell's command
+        # line, where a stray quote makes it executable and a trace makes it
+        # visible; as a variable it is neither.
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          test -n "${{ secrets.VERCEL_TOKEN }}" || { echo "::error::repository secret VERCEL_TOKEN is not set"; exit 1; }
+          test -n "${VERCEL_TOKEN:-}" || { echo "::error::repository secret VERCEL_TOKEN is not set"; exit 1; }
           test -n "$VERCEL_PROJECT_ID" || { echo "::error::repository variable VERCEL_PROJECT_ID is not set"; exit 1; }
 
       - name: Report what the project is set to now
@@ -85,11 +98,15 @@ jobs:
           echo "rootDirectory is now: $(jq -r '.rootDirectory // "<repo root>"' after.json)"
 
       - name: Say what happens next
+        env:
+          # Read as a shell variable, not pasted into the script by the
+          # expression parser. See the note in simulate-race.yml.
+          ROOT: ${{ inputs.root_directory }}
         run: |
           {
             echo "## Vercel project"
             echo
-            echo "\`rootDirectory\` set to \`${{ inputs.root_directory }}\`."
+            echo "\`rootDirectory\` set to \`${ROOT}\`."
             echo
             echo "This does not rebuild anything by itself. The next push that"
             echo "touches the frontend will build, and the *Verify the frontend"

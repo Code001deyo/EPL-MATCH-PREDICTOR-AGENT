@@ -144,3 +144,43 @@ class TestSeasonPruning:
         _add(db, "2024-25", "E0", 10)
         assert _prune_seasons_before(db, "2014-15") == 0
         assert db.query(MatchResult).count() == 1
+
+
+class TestSeedContainsNoPersonalData:
+    """The committed seed database must never carry subscriber or admin rows.
+
+    `backend/seed/epl.db` is published with the repository. It is clean today
+    only because it was generated before those tables existed - regenerating it
+    from a live database would commit real addresses and a password hash, and
+    nothing else in the build would notice.
+    """
+
+    def test_the_committed_seed_is_clean(self):
+        from db.seed_audit import SEED_DB, pii_tables
+        assert pii_tables(SEED_DB) == []
+
+    def test_the_check_fails_on_a_database_that_does_contain_them(self, tmp_path):
+        """A guard that has never fired is a guard nobody has tested."""
+        import sqlite3
+
+        from db.seed_audit import pii_tables
+
+        path = tmp_path / "dirty.db"
+        con = sqlite3.connect(path)
+        con.execute("CREATE TABLE match_results (id INTEGER PRIMARY KEY)")
+        con.execute("CREATE TABLE subscribers (id INTEGER PRIMARY KEY, email TEXT)")
+        con.execute("CREATE TABLE admin_users (id INTEGER PRIMARY KEY)")
+        con.commit()
+        con.close()
+
+        assert pii_tables(path) == ["admin_users", "subscribers"]
+
+    def test_a_missing_file_is_an_error_not_a_pass(self, tmp_path):
+        """Returning [] for a file that is not there would make the guard silent
+        the moment the path changed."""
+        import pytest as _pytest
+
+        from db.seed_audit import pii_tables
+
+        with _pytest.raises(FileNotFoundError):
+            pii_tables(tmp_path / "nope.db")

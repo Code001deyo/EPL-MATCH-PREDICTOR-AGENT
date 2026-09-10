@@ -23,22 +23,46 @@ env:
 
   # The operator address. Receives the password-reset link and the automatic
   # retrain notice, and is the only address either is ever sent to.
-  ADMIN_EMAIL: hanovatechnologies@gmail.com
-  RESET_EMAIL_TO: hanovatechnologies@gmail.com
+  #
+  # It comes from the repository variable ADMIN_EMAIL rather than sitting here.
+  # It is not a credential, but it is the fixed recipient of password-reset
+  # links, and publishing it in a public repository narrows an attack on this
+  # system to "compromise this one mailbox". Set it under
+  # Settings > Secrets and variables > Actions > Variables.
+  ADMIN_EMAIL: ${{ vars.ADMIN_EMAIL }}
+  RESET_EMAIL_TO: ${{ vars.ADMIN_EMAIL }}
 
   # Every unsubscribe and privacy link in every outgoing email is built on this.
   # Unset, those links have no host and do not resolve, which in bulk mail is
   # both a broken promise and the fastest route to a spam classification.
   PUBLIC_SITE_URL: https://novapl.vercel.app
 
+# Least privilege. Nothing here writes to the repository: the deploys are
+# driven through Render's and Vercel's own APIs, and deploy-backend.yml pushes
+# to Hugging Face with its own token. A workflow that needs more should raise
+# it on the one job that needs it, not here.
+permissions:
+  contents: read
+
 jobs:
   configure:
     runs-on: ubuntu-latest
     steps:
       - name: Check configuration
+        # The presence check reads these from the environment. Interpolating a
+        # secret into the script text puts its value in the shell's command
+        # line, where a stray quote makes it executable and a trace makes it
+        # visible; as a variable it is neither.
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
         run: |
-          test -n "${{ secrets.RENDER_API_KEY }}" || { echo "::error::repository secret RENDER_API_KEY is not set"; exit 1; }
-          test -n "${{ vars.API_BASE_URL }}" || { echo "::error::repository variable API_BASE_URL is not set"; exit 1; }
+          test -n "${RENDER_API_KEY:-}" || { echo "::error::repository secret RENDER_API_KEY is not set"; exit 1; }
+          test -n "${API_BASE_URL:-}" || { echo "::error::repository variable API_BASE_URL is not set"; exit 1; }
+          # Unset, this would push an empty ADMIN_EMAIL to Render and the
+          # password-reset mail would have nowhere to go - a failure that only
+          # shows up the day someone is locked out.
+          test -n "${ADMIN_EMAIL:-}" || { echo "::error::repository variable ADMIN_EMAIL is not set"; exit 1; }
 
       - name: Resolve the service id
         env:
@@ -117,11 +141,12 @@ jobs:
 
       - name: Wait for the redeploy
         env:
+          DEPLOY_ID: ${{ steps.trigger.outputs.id }}
           TOKEN: ${{ secrets.RENDER_API_KEY }}
         run: |
           set -euo pipefail
           for i in $(seq 1 60); do
-            status=$(curl -sS --fail               -H "Authorization: Bearer $TOKEN"               "https://api.render.com/v1/services/${SERVICE_ID}/deploys/${{ steps.trigger.outputs.id }}"               | jq -r '.status')
+            status=$(curl -sS --fail               -H "Authorization: Bearer $TOKEN"               "https://api.render.com/v1/services/${SERVICE_ID}/deploys/${DEPLOY_ID}"               | jq -r '.status')
             echo "[$i] $status"
             case "$status" in
               live) echo "the service is live on the new configuration"; exit 0 ;;

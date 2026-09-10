@@ -1,0 +1,51 @@
+# Keeps the dependency lists moving on their own.
+#
+# Without this the list only grows: `npm audit --omit=dev` was reporting 55
+# advisories the day the repository went public, and nothing in the project was
+# ever going to raise that on its own.
+#
+# Grouped and monthly on purpose. Ungrouped weekly updates on a project this size
+# open enough pull requests that they stop being read, and a Dependabot pull
+# request nobody reads is worse than none - it looks like the problem is handled.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      # Everything that only runs during a build. These are the bulk of the
+      # advisories and none of them reach a browser.
+      build-tooling:
+        dependency-type: development
+        update-types: ["minor", "patch"]
+      # Anything that ships to the user, kept separate so it gets read.
+      runtime:
+        dependency-type: production
+        update-types: ["minor", "patch"]
+    ignore:
+      # react-scripts is Create React App, which is unmaintained. Its advisories
+      # have no upstream fix; the real remedy is migrating off it, which is a
+      # project of its own rather than a dependency bump. Tracked in
+      # docs/SECURITY_AUDIT.md.
+      - dependency-name: react-scripts
+
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      python:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]

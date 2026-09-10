@@ -144,7 +144,7 @@ python scripts/make-admin-hash.py
 | `ALLOWED_ORIGINS` | comma-separated; defaults to localhost + the Vercel origin |
 | `DATABASE_URL` | Neon Postgres connection string. Unset means SQLite on the local disk, which is wiped on every restart |
 | `RESEND_API_KEY` | sends the password-reset email |
-| `RESET_EMAIL_TO` | fixed recipient for reset links (`hanovatechnologies@gmail.com`) |
+| `RESET_EMAIL_TO` | fixed recipient for reset links; set from the `ADMIN_EMAIL` repository variable |
 | `RESET_EMAIL_FROM` | verified Resend sender, e.g. `EPL Predictor <noreply@hanovatechnologies.co.ke>` |
 | `RESET_LINK_BASE` | public site URL used to build the reset link |
 | `ENABLE_DOCS` | set to `1` only where you want `/docs` exposed; leave unset in production |
@@ -210,7 +210,7 @@ the logs while the mail configuration is fixed. It never pretends to have sent
 something it did not.
 
 **Verified in production 2026-08-24:** `noreply@hanovatechnologies.co.ke` →
-`hanovatechnologies@gmail.com`, status `delivered` in Resend's own record. The
+the operator address, status `delivered` in Resend's own record. The
 token from that mail was then used once (200), reused (400) and the new password
 accepted at login (200).
 

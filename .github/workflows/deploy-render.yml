@@ -41,11 +41,22 @@ env:
   SERVICE_NAME: epl-predictor-api
   API: ${{ vars.API_BASE_URL }}
 
+# Least privilege. Nothing here writes to the repository: the deploys are
+# driven through Render's and Vercel's own APIs, and deploy-backend.yml pushes
+# to Hugging Face with its own token. A workflow that needs more should raise
+# it on the one job that needs it, not here.
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Check configuration
+        # The presence check reads the key from the environment. Interpolating a
+        # secret into the script text puts its value in the shell's command line,
+        # where a stray quote makes it executable and a trace makes it visible;
+        # as a variable it is neither.
         env:
           KEY: ${{ secrets.RENDER_API_KEY }}
         run: |
@@ -88,24 +99,26 @@ jobs:
         # quietly, this is the line that says so - and it is the answer to the
         # question that took an hour of guessing on 2026-08-29.
         env:
+          SERVICE_ID: ${{ steps.svc.outputs.id }}
           KEY: ${{ secrets.RENDER_API_KEY }}
         run: |
           set -euo pipefail
           curl -sS --fail-with-body \
             -H "Authorization: Bearer $KEY" \
-            "https://api.render.com/v1/services/${{ steps.svc.outputs.id }}/deploys?limit=5" > deploys.json
+            "https://api.render.com/v1/services/${SERVICE_ID}/deploys?limit=5" > deploys.json
           echo "Five most recent deploys:"
           jq -r '.[].deploy | "  \(.createdAt)  \(.status)  \(.commit.id[0:8] // "-")  \(.commit.message // "" | split("\n")[0])"' deploys.json
           echo
           echo "autoDeploy setting:"
           curl -sS --fail-with-body \
             -H "Authorization: Bearer $KEY" \
-            "https://api.render.com/v1/services/${{ steps.svc.outputs.id }}" \
+            "https://api.render.com/v1/services/${SERVICE_ID}" \
             | jq -r '"  autoDeploy=\(.autoDeploy)  branch=\(.branch)  suspended=\(.suspended)"'
 
       - name: Trigger the deploy
         id: trigger
         env:
+          SERVICE_ID: ${{ steps.svc.outputs.id }}
           KEY: ${{ secrets.RENDER_API_KEY }}
         run: |
           set -euo pipefail
@@ -115,7 +128,7 @@ jobs:
             -H "Authorization: Bearer $KEY" \
             -H "Content-Type: application/json" \
             -d '{"clearCache":"do_not_clear"}' \
-            "https://api.render.com/v1/services/${{ steps.svc.outputs.id }}/deploys" > deploy.json
+            "https://api.render.com/v1/services/${SERVICE_ID}/deploys" > deploy.json
           id=$(jq -r '.id' deploy.json)
           test -n "$id" && test "$id" != "null" || { echo "::error::Render did not return a deploy id"; cat deploy.json; exit 1; }
           echo "id=$id" >> "$GITHUB_OUTPUT"
@@ -123,6 +136,8 @@ jobs:
 
       - name: Wait for the build
         env:
+          SERVICE_ID: ${{ steps.svc.outputs.id }}
+          DEPLOY_ID: ${{ steps.trigger.outputs.id }}
           KEY: ${{ secrets.RENDER_API_KEY }}
         run: |
           set -euo pipefail
@@ -131,7 +146,7 @@ jobs:
           for i in $(seq 1 60); do
             status=$(curl -sS --fail \
               -H "Authorization: Bearer $KEY" \
-              "https://api.render.com/v1/services/${{ steps.svc.outputs.id }}/deploys/${{ steps.trigger.outputs.id }}" \
+              "https://api.render.com/v1/services/${SERVICE_ID}/deploys/${DEPLOY_ID}" \
               | jq -r '.status')
             echo "[$i] $status"
             case "$status" in

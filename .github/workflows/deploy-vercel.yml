@@ -41,6 +41,13 @@ concurrency:
 env:
   SITE: ${{ vars.SITE_BASE_URL }}
 
+# Least privilege. Nothing here writes to the repository: the deploys are
+# driven through Render's and Vercel's own APIs, and deploy-backend.yml pushes
+# to Hugging Face with its own token. A workflow that needs more should raise
+# it on the one job that needs it, not here.
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest

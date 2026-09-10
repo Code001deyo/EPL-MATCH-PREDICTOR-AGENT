@@ -24,6 +24,13 @@ concurrency:
   group: refresh-data
   cancel-in-progress: false
 
+# Least privilege. Nothing here writes to the repository: the deploys are
+# driven through Render's and Vercel's own APIs, and deploy-backend.yml pushes
+# to Hugging Face with its own token. A workflow that needs more should raise
+# it on the one job that needs it, not here.
+permissions:
+  contents: read
+
 jobs:
   refresh:
     runs-on: ubuntu-latest
@@ -35,9 +42,16 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Check configuration
+        # The presence check reads these from the environment. Interpolating a
+        # secret into the script text puts its value in the shell's command
+        # line, where a stray quote makes it executable and a trace makes it
+        # visible; as a variable it is neither.
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
         run: |
-          test -n "${{ secrets.ADMIN_API_KEY }}" || { echo "::error::repository secret ADMIN_API_KEY is not set"; exit 1; }
-          test -n "${{ vars.API_BASE_URL }}" || { echo "::error::repository variable API_BASE_URL is not set"; exit 1; }
+          test -n "${ADMIN_API_KEY:-}" || { echo "::error::repository secret ADMIN_API_KEY is not set"; exit 1; }
+          test -n "${API_BASE_URL:-}" || { echo "::error::repository variable API_BASE_URL is not set"; exit 1; }
 
       - name: Wake the instance
         # A sleeping free instance takes about a minute to come back. Waking it
