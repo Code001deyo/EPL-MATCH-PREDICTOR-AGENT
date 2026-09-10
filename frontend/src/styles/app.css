@@ -647,3 +647,8 @@ input:not([type="hidden"]),
   min-height: 100vh;
   min-height: 100dvh;
 }
+
+/* Root directory note: this file is only read when the Vercel project builds
+   from frontend/. Until 2026-09-10 the project built from the repo root, so
+   every git deployment failed on a missing package.json and this config was
+   never loaded. */
