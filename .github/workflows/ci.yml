@@ -100,10 +100,18 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      # Served without a backend on purpose. Every API call 404s, so this checks
-      # that each page renders its honest empty state and stays laid out — which
-      # is the state a freshly deployed instance actually serves before ingestion
-      # finishes. Expected 404 noise is filtered; any other console error fails.
+      # Served without a backend on purpose, so every page has to render its
+      # honest empty state and stay laid out - the state a freshly deployed
+      # instance actually serves before ingestion finishes.
+      #
+      # Note what `serve -s` really does with /api: it does NOT answer 404. The
+      # SPA fallback catches those paths too and returns index.html with a 200,
+      # which is precisely what a misconfigured rewrite does in production. This
+      # comment used to claim 404s, and that wrong premise hid a real bug for as
+      # long as it stood - three pages read a field off a body that was HTML,
+      # stored `undefined` where they had arrays, and white-screened on the first
+      # `.map`. See frontend/src/api.js. Keep the fallback: it is the harder and
+      # more realistic test of the two.
       - name: Serve the production build
         working-directory: frontend
         run: |
