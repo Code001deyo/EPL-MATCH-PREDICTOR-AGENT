@@ -152,12 +152,18 @@ export default function Privacy() {
             shown for identification only.
           </p>
           <p style={p}>
-            If gambling is causing you or someone close to you harm, help is
-            available: in the UK,{" "}
-            <a href="https://www.begambleaware.org" style={link} rel="noopener noreferrer">
-              BeGambleAware
+            If gambling is causing you or someone close to you harm, free and
+            confidential help is available in Kenya, around the clock:{" "}
+            <a href="https://gamhelpkenya.com" style={link} rel="noopener noreferrer">
+              GamHelp Kenya
             </a>{" "}
-            and the National Gambling Helpline on 0808 8020 133, free and open all day.
+            on +254 726 883 960 (call or WhatsApp), and{" "}
+            <a href="https://www.responsiblegambling.or.ke" style={link} rel="noopener noreferrer">
+              Responsible Gambling Kenya
+            </a>{" "}
+            on the toll-free line 1199. Betting in Kenya is regulated by the
+            Betting Control and Licensing Board; this site is not licensed by it
+            and does not need to be, because it takes no bets.
           </p>
         </Section>
       </Card>
