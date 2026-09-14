@@ -30,6 +30,10 @@ export default function Privacy() {
             If you do subscribe, we store your email address and nothing else
             about you.
           </p>
+          <p style={p}>
+            This is not a betting service and not an affiliate of one, or of the
+            Premier League. The full notice is further down this page.
+          </p>
         </Section>
       </Card>
 
@@ -124,6 +128,40 @@ export default function Privacy() {
         </Section>
       </Card>
 
+      <Card style={{ marginBottom: 20 }}>
+        <Section title="Not betting advice, and not affiliated">
+          <p style={p}>
+            This application is not a betting service and is not to be used as one.
+            The predictions it publishes are the output of a statistical model,
+            shown together with the record of how often that model has been right.
+            They are published for interest. They are not advice to place a bet,
+            they carry no guarantee of any outcome, and no decision to stake money
+            should be made on them. If you choose to gamble, that choice and its
+            consequences are yours.
+          </p>
+          <p style={p}>
+            This site does not take bets, does not link to bookmakers, and earns
+            nothing from any wager placed anywhere. It is not an affiliate of any
+            betting operator.
+          </p>
+          <p style={p}>
+            It is also not affiliated with, endorsed by, or connected to the Premier
+            League, any of its member clubs, or football-data.co.uk. Match data is
+            drawn from their public sources and is theirs, not ours. Club crests are
+            the registered trade marks of the clubs and the Premier League and are
+            shown for identification only.
+          </p>
+          <p style={p}>
+            If gambling is causing you or someone close to you harm, help is
+            available: in the UK,{" "}
+            <a href="https://www.begambleaware.org" style={link} rel="noopener noreferrer">
+              BeGambleAware
+            </a>{" "}
+            and the National Gambling Helpline on 0808 8020 133, free and open all day.
+          </p>
+        </Section>
+      </Card>
+
       <Card>
         <Section title="Contact">
           <p style={p}>
@@ -132,10 +170,6 @@ export default function Privacy() {
             <a href="mailto:privacy@hanovatechnologies.co.ke" style={link}>
               privacy@hanovatechnologies.co.ke
             </a>.
-          </p>
-          <p style={{ ...p, color: C.slate400, fontSize: 12 }}>
-            Predictions on this site are a statistical model's output, published for
-            interest. They are not betting advice.
           </p>
         </Section>
       </Card>
