@@ -9,11 +9,24 @@ A model that is right about 53% of 1X2 calls must not send mail that reads like 
 tip service. The post-match email therefore reports a wrong call as plainly as a
 right one; hiding the misses would make the running record meaningless and is the
 single fastest way to lose a reader's trust.
+
+Every message is built twice, as plain text and as HTML, and both are sent. The
+HTML version is what nearly every mail client shows, and in it the unsubscribe
+and confirm links are buttons: the reader sees "Unsubscribe", not a URL with a
+token in it. The token still travels in the message - it has to, it is the
+credential that makes one click enough - but it lives in the button's href, not
+in front of the reader's eyes. The plain-text version keeps the bare URL because a
+text-only client has no button to press and must still have a way out.
 """
 
 from __future__ import annotations
 
+import html as _html
 import os
+
+from notify.html_mail import button, render
+
+SIGNATURE = "EPL Score Predictor, a product of Hanova Technologies."
 
 
 def privacy_url() -> str:
@@ -42,16 +55,42 @@ def _outcome_line(home: str, away: str, pred: dict) -> str:
     )
 
 
-def pre_match(fixture, pred: dict, unsubscribe_url: str) -> tuple[str, str]:
-    """(subject, body) for the message sent before kickoff."""
+def _text_footer(unsubscribe_url: str) -> str:
+    return f"""
+-
+{SIGNATURE}
+Unsubscribe: {unsubscribe_url}
+Privacy: {privacy_url()}
+"""
+
+
+def _notification(core: str, unsubscribe_url: str) -> tuple[str, str]:
+    """(text, html) for a notification whose body is `core`.
+
+    The two share the words. Only the way out differs: a URL in text, a button
+    in HTML.
+    """
+    text = core + _text_footer(unsubscribe_url)
+    html = render(
+        core,
+        actions=button("Unsubscribe", unsubscribe_url, quiet=True),
+        footer=(
+            f"{_html.escape(SIGNATURE)}<br>"
+            f"<a href=\"{_html.escape(privacy_url(), quote=True)}\">Privacy</a>"
+        ),
+    )
+    return text, html
+
+
+def pre_match(fixture, pred: dict, unsubscribe_url: str) -> tuple[str, str, str]:
+    """(subject, text, html) for the message sent before kickoff."""
     home, away = fixture.home_team, fixture.away_team
     subject = f"{home} v {away} - the model's call"
 
-    policy = privacy_url()
     scoreline = f"{pred.get('predicted_home')}-{pred.get('predicted_away')}"
     kickoff = fixture.kickoff_label or fixture.kickoff_utc or "time to be confirmed"
 
-    body = f"""{home} v {away}
+    core = f"""{home} v {away}
 Matchweek {fixture.matchweek} · {kickoff}
 
   Predicted scoreline   {scoreline}
@@ -62,20 +101,15 @@ score - most matches land on some other scoreline, and the percentages above are
 the honest version of the same prediction.
 
 You will get the result and how this call went once the match finishes.
-
--
-EPL Score Predictor, a product of Hanova Technologies.
-Unsubscribe: {unsubscribe_url}
-Privacy: {policy}
 """
-    return subject, body
+    text, html = _notification(core, unsubscribe_url)
+    return subject, text, html
 
 
 def post_match(fixture, pred: dict | None, home_goals: int, away_goals: int,
-               unsubscribe_url: str) -> tuple[str, str]:
-    """(subject, body) for the message sent after the final whistle."""
+               unsubscribe_url: str) -> tuple[str, str, str]:
+    """(subject, text, html) for the message sent after the final whistle."""
     home, away = fixture.home_team, fixture.away_team
-    policy = privacy_url()
     actual = f"{home_goals}-{away_goals}"
     subject = f"{home} {home_goals}-{away_goals} {away}"
 
@@ -83,17 +117,14 @@ def post_match(fixture, pred: dict | None, home_goals: int, away_goals: int,
         # No stored prediction: say so rather than reconstructing one after the
         # fact. A prediction produced once the result is known is not a
         # prediction, and printing it next to the score would imply it was.
-        return subject, f"""{home} {actual} {away}
+        core = f"""{home} {actual} {away}
 Matchweek {fixture.matchweek}
 
 No prediction was recorded for this fixture, so there is nothing to score it
 against.
-
--
-EPL Score Predictor, a product of Hanova Technologies.
-Unsubscribe: {unsubscribe_url}
-Privacy: {policy}
 """
+        text, html = _notification(core, unsubscribe_url)
+        return subject, text, html
 
     predicted = f"{pred.get('predicted_home')}-{pred.get('predicted_away')}"
 
@@ -110,7 +141,7 @@ Privacy: {policy}
     else:
         verdict = "Called it wrong."
 
-    body = f"""{home} {actual} {away}
+    core = f"""{home} {actual} {away}
 Matchweek {fixture.matchweek}
 
   Predicted   {predicted}
@@ -123,34 +154,42 @@ Matchweek {fixture.matchweek}
 
 One match says very little either way. The model's record over every completed
 matchweek is on the site, which is the number worth judging it by.
-
--
-EPL Score Predictor, a product of Hanova Technologies.
-Unsubscribe: {unsubscribe_url}
-Privacy: {policy}
 """
-    return subject, body
+    text, html = _notification(core, unsubscribe_url)
+    return subject, text, html
 
 
-def confirm_subscription(confirm_url: str) -> tuple[str, str]:
-    """(subject, body) for the double opt-in email."""
-    return (
-        "Confirm your EPL Predictor notifications",
-        f"""Someone - probably you - asked for match predictions to be sent to this
+def confirm_subscription(confirm_url: str) -> tuple[str, str, str]:
+    """(subject, text, html) for the double opt-in email."""
+    subject = "Confirm your EPL Predictor notifications"
+
+    lead = """Someone - probably you - asked for match predictions to be sent to this
 address.
-
-Confirm to start receiving them:
-
-{confirm_url}
-
-You will get two emails per match you follow: the prediction shortly before
+"""
+    rest = """You will get two emails per match you follow: the prediction shortly before
 kickoff, and the result with how the call went shortly after the final whistle.
 
 If this was not you, ignore this email. Nothing is sent to an address that has
 not confirmed, so there is nothing to unsubscribe from and no further messages
 will arrive.
+"""
+    text = f"""{lead}
+Confirm to start receiving them:
 
+{confirm_url}
+
+{rest}
 -
-EPL Score Predictor, a product of Hanova Technologies.
+{SIGNATURE}
 Privacy: {privacy_url()}
-""")
+"""
+    html = render(
+        lead,
+        actions=button("Confirm subscription", confirm_url),
+        after=rest,
+        footer=(
+            f"{_html.escape(SIGNATURE)}<br>"
+            f"<a href=\"{_html.escape(privacy_url(), quote=True)}\">Privacy</a>"
+        ),
+    )
+    return subject, text, html

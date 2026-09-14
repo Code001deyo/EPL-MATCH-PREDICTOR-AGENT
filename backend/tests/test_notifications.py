@@ -183,7 +183,7 @@ def test_the_post_match_email_reports_a_wrong_call_as_a_wrong_call(db):
     fixture = _fixture(db, minutes_from_now=-200)
     pred = {"predicted_home": 2, "predicted_away": 0, "home_win_prob": 0.6,
             "draw_prob": 0.2, "away_win_prob": 0.2}
-    _, body = templates.post_match(fixture, pred, 0, 3, "https://x/u")
+    _, body, _ = templates.post_match(fixture, pred, 0, 3, "https://x/u")
     assert "Called it wrong." in body, (
         "hiding the misses makes the running record meaningless"
     )
@@ -193,8 +193,14 @@ def test_the_post_match_email_does_not_invent_a_prediction_after_the_fact(db):
     from notify import templates
 
     fixture = _fixture(db, minutes_from_now=-200)
-    _, body = templates.post_match(fixture, None, 1, 1, "https://x/u")
+    _, body, _ = templates.post_match(fixture, None, 1, 1, "https://x/u")
     assert "No prediction was recorded" in body
+
+
+def _visible_text(doc: str) -> str:
+    """What a reader sees: the document with every tag removed."""
+    import re
+    return re.sub(r"<[^>]+>", "", doc)
 
 
 def test_every_email_carries_a_way_out(db):
@@ -203,10 +209,16 @@ def test_every_email_carries_a_way_out(db):
     fixture = _fixture(db, minutes_from_now=10)
     pred = {"predicted_home": 2, "predicted_away": 1, "home_win_prob": 0.5,
             "draw_prob": 0.25, "away_win_prob": 0.25}
-    _, pre_body = templates.pre_match(fixture, pred, "https://x/unsub?token=abc")
-    _, post_body = templates.post_match(fixture, pred, 2, 1, "https://x/unsub?token=abc")
+    _, pre_body, pre_html = templates.pre_match(fixture, pred, "https://x/unsub?token=abc")
+    _, post_body, post_html = templates.post_match(fixture, pred, 2, 1, "https://x/unsub?token=abc")
     assert "https://x/unsub?token=abc" in pre_body
     assert "https://x/unsub?token=abc" in post_body
+    # The HTML carries it too, but only as a button's href. The reader sees
+    # the word "Unsubscribe" and never the token.
+    for doc in (pre_html, post_html):
+        assert 'href="https://x/unsub?token=abc"' in doc
+        assert ">Unsubscribe</a>" in doc
+        assert _visible_text(doc).count("token=abc") == 0
 
 
 # --- the whole path, with a stub mailer -----------------------------------

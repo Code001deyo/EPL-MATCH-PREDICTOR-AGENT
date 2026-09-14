@@ -57,10 +57,14 @@ def _send_to_all(db, fixture, kind, build_message) -> dict:
             skipped += 1
             continue
 
-        subject, body = build_message(_unsubscribe_url(subscriber.unsubscribe_token))
+        unsubscribe_url = _unsubscribe_url(subscriber.unsubscribe_token)
+        subject, text, html = build_message(unsubscribe_url)
+        # Both parts go. The HTML is what the reader sees, with the way out as
+        # a button rather than a URL carrying their token; the text is the
+        # fallback for a client that renders nothing else.
         ok = send(
-            subscriber.email, subject, body,
-            headers={"List-Unsubscribe": f"<{_unsubscribe_url(subscriber.unsubscribe_token)}>"},
+            subscriber.email, subject, text, html=html,
+            headers={"List-Unsubscribe": f"<{unsubscribe_url}>"},
         )
         if ok:
             sent += 1

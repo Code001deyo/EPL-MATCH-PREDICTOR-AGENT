@@ -131,13 +131,6 @@ export default function Dashboard() {
         <CalibrationPanel />
       </div>
 
-      {/* Sign-up sits after the two charts that establish whether the model is
-          worth following, and before the detail. Asking for an address above the
-          evidence would be asking before the reader has any reason to say yes. */}
-      <div style={{ marginBottom: space.xl }}>
-        <SubscribeCard />
-      </div>
-
       {/* ---- below the fold ---- */}
 
       <div style={{
@@ -163,6 +156,15 @@ export default function Dashboard() {
       </div>
 
       <DataProvenance />
+
+      {/* Sign-up is the last thing on the page, just above the footer. It used
+          to sit between the accuracy charts and the detail; asking for an
+          address before the reader has seen all the evidence is asking before
+          they have a reason to say yes, and the bottom of the page is where a
+          reader who has read everything arrives. */}
+      <div style={{ marginTop: space.xl }}>
+        <SubscribeCard />
+      </div>
     </div>
   );
 }

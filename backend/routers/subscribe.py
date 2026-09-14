@@ -108,10 +108,10 @@ def subscribe(payload: dict, request: Request, db: Session = Depends(get_db)):
         # the one message that has to work.
         base = (os.environ.get("PUBLIC_SITE_URL") or "").rstrip("/")
         confirm_url = f"{base}/api/subscribe/confirm?token={row.confirm_token}"
-        subject, body = templates.confirm_subscription(confirm_url)
+        subject, text, html = templates.confirm_subscription(confirm_url)
         # If this fails, mailer logs loudly. The caller still gets the generic
         # reply - telling them the send failed would reveal the address exists.
-        send(email, subject, body)
+        send(email, subject, text, html=html)
 
     return GENERIC
 
