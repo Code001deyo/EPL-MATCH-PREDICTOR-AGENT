@@ -39,7 +39,7 @@ jobs:
       # real file rather than inline in YAML means it can be run and tested
       # locally, which is how the stale assertion this workflow used to carry
       # would have been caught.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check configuration
         # The presence check reads these from the environment. Interpolating a

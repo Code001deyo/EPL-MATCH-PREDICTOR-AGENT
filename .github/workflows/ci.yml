@@ -22,9 +22,9 @@ jobs:
     name: Backend tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -53,9 +53,9 @@ jobs:
     name: Frontend build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -84,9 +84,9 @@ jobs:
     name: Frontend QA
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -133,7 +133,7 @@ jobs:
         run: npm run qa:responsive -- http://localhost:3000
 
       # The evidence, kept for the eye check no assertion replaces.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: qa-screenshots
@@ -146,7 +146,7 @@ jobs:
     name: Seed snapshot present
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # The deployed backend has no persistent disk and relies on these being in
       # the image. A .gitignore change that silently dropped them would otherwise
       # only be noticed by a user hitting a 503 in production.
